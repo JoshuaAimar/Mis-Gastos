@@ -102,9 +102,41 @@ nav button:focus-visible{outline-color:var(--gold)}
 section[hidden]{display:none}
 .status{font-size:13px;color:var(--muted);text-align:center;margin-top:26px}
 @media (prefers-reduced-motion:reduce){.meter span{transition:none}}
+
+/* Bloqueo */
+body.locked main, body.locked nav{display:none}
+.lock{position:fixed;inset:0;background:var(--black);color:var(--on-black);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));z-index:20}
+body.locked .lock{display:flex}
+.lock-in{width:100%;max-width:340px;text-align:center}
+.lock-in img{width:72px;height:72px;border-radius:18px}
+.lock-in h1{margin:14px 0 4px;font-size:28px}
+.lock-in p{margin:0 0 18px;color:var(--on-black-muted)}
+.pin{width:100%;text-align:center;font-size:30px;letter-spacing:.4em;padding:12px;border:2px solid #2A302A;border-radius:14px;background:#141714;color:var(--gold);margin-bottom:10px;font-family:"Chakra Petch",Figtree,sans-serif}
+.pin::placeholder{letter-spacing:normal;font-size:17px;font-family:Figtree,system-ui,sans-serif;color:#6E776E}
+.pin:focus{border-color:var(--gold);outline:none;box-shadow:var(--glow)}
+.pin[hidden]{display:none}
+.lock .btn{width:100%;margin-top:6px;padding:13px}
+.lock .btn:disabled{opacity:.6;cursor:wait}
+.lock .err{color:#FF4D5E;min-height:1.4em;margin-top:10px}
+.linkbtn{background:none;border:0;color:var(--on-black-muted);text-decoration:underline;cursor:pointer;margin-top:18px;font-size:14px}
+.lock :focus-visible{outline-color:var(--gold)}
+.sec-grid{display:grid;gap:8px;margin-top:10px}
+.sec-grid input{border:1px solid var(--line);background:var(--sheet);border-radius:12px;padding:11px 12px;min-width:0;width:100%}
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="lock" id="lock">
+  <div class="lock-in">
+    <img src="icons/icon-192.png" alt="">
+    <h1>Mis gastos</h1>
+    <p id="lockMsg">Cargando…</p>
+    <input class="pin" id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="PIN">
+    <input class="pin" id="pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="Confirma tu PIN" placeholder="Confirma" hidden>
+    <button class="btn" id="unlockBtn">Desbloquear</button>
+    <p class="err" id="lockErr" role="alert"></p>
+    <button class="linkbtn" id="forgot" hidden>Olvidé mi PIN</button>
+  </div>
+</div>
 <main class="wrap">
 
 <section id="semana">
@@ -175,8 +207,27 @@ section[hidden]{display:none}
   </div>
   <p class="err" id="fErr" role="status"></p>
 
+  <h2>Seguridad</h2>
+  <div class="field">
+    <label for="autoLock">Bloquear sola después de</label>
+    <select id="autoLock">
+      <option value="1">1 minuto sin usarla</option>
+      <option value="5">5 minutos sin usarla</option>
+      <option value="15">15 minutos sin usarla</option>
+    </select>
+  </div>
+  <button class="btn ghost" id="lockNow" style="width:100%">Bloquear ahora</button>
+  <div class="sec-grid">
+    <label style="font-weight:600;margin-top:14px" for="curPin">Cambiar PIN</label>
+    <input id="curPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="PIN actual">
+    <input id="newPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="PIN nuevo (6 a 8 dígitos)">
+    <input id="newPin2" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Confirma el PIN nuevo">
+    <button class="btn" id="chgPin">Cambiar PIN</button>
+  </div>
+  <p class="err" id="sErr" role="status"></p>
+
   <h2>Respaldo</h2>
-  <p class="hint" style="margin-top:-4px">Tus datos viven solo en este celular. Descarga un respaldo de vez en cuando por si cambias de teléfono o borras el navegador.</p>
+  <p class="hint" style="margin-top:-4px">Tus datos viven solo en este celular y están cifrados con tu PIN. El respaldo también va cifrado: para restaurarlo necesitas el PIN que tenías al descargarlo.</p>
   <div class="row" style="margin-top:10px">
     <button class="btn ghost" id="exp" style="flex:1">Descargar respaldo</button>
     <button class="btn ghost" id="impBtn" style="flex:1">Restaurar respaldo</button>
@@ -200,15 +251,40 @@ const money=n=>fmt.format(Math.round(n*100)/100);
 const $=id=>document.getElementById(id);
 const WEEKS_PER_MONTH=52/12;
 
-let state={income:0,payday:1,savingPct:10,fixed:[],expenses:[]};
+let state={income:0,payday:1,savingPct:10,autoLock:5,fixed:[],expenses:[]};
 let cat=CATS[0];
 
-/* ---------- storage ---------- */
-const KEY="mis-gastos";
-function loadLocal(){try{const v=localStorage.getItem(KEY);if(v)return JSON.parse(v)}catch(e){}return null}
+/* ---------- almacenamiento cifrado ---------- */
+const LEGACY="mis-gastos", VAULT="mis-gastos-vault", FAILS="mis-gastos-fails";
+const ITER=600000;
+const DEFAULT_STATE=()=>({income:0,payday:1,savingPct:10,autoLock:5,fixed:[],expenses:[]});
+let key=null, salt=null, writing=Promise.resolve();
+const enc=new TextEncoder(), dec=new TextDecoder();
+function b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)}
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function deriveKey(pin,saltBytes,iter){
+  const base=await crypto.subtle.importKey("raw",enc.encode(pin),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt:saltBytes,iterations:iter,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function seal(obj,k,saltBytes){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,enc.encode(JSON.stringify(obj)));
+  return {app:"mis-gastos",v:1,iter:ITER,salt:b64(saltBytes),iv:b64(iv),ct:b64(ct)};
+}
+async function unseal(v,k){
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(v.iv)},k,unb64(v.ct));
+  return JSON.parse(dec.decode(pt));
+}
+function readVault(){try{const v=localStorage.getItem(VAULT);return v?JSON.parse(v):null}catch(e){return null}}
 function persist(){
-  try{localStorage.setItem(KEY,JSON.stringify(state));$("status").textContent="Guardado en este dispositivo."}
-  catch(e){$("status").textContent="No se pudo guardar. Revisa que el navegador permita almacenamiento."}
+  if(!key)return;
+  const snap=JSON.parse(JSON.stringify(state)), k=key, sl=salt;
+  writing=writing.then(async()=>{
+    const v=await seal(snap,k,sl);
+    localStorage.setItem(VAULT,JSON.stringify(v));
+    $("status").textContent="Guardado y cifrado en este dispositivo.";
+  }).catch(()=>{$("status").textContent="No se pudo guardar. Revisa que el navegador permita almacenamiento."});
+  return writing;
 }
 if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().catch(()=>{})}
 
@@ -288,6 +364,7 @@ function render(){
   // settings
   if(document.activeElement!==$("inc"))$("inc").value=state.income||"";
   $("payday").value=String(state.payday);
+  $("autoLock").value=String(state.autoLock||5);
   if(document.activeElement!==$("sav"))$("sav").value=state.savingPct??"";
   const fl=$("fixedList");fl.innerHTML="";
   if(!state.fixed.length)fl.innerHTML='<li class="empty">Aún no agregas gastos fijos.</li>';
@@ -334,30 +411,151 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
   window.scrollTo(0,0);
 });
 
-const local=loadLocal(); if(local)state=Object.assign(state,local);
-render();
-$("status").textContent="Tus datos se guardan solo en este dispositivo.";
+/* ---------- bloqueo ---------- */
+let mode="unlock", busy=false, lastActive=Date.now(), hiddenAt=0;
+function readFails(){try{return JSON.parse(localStorage.getItem(FAILS))||{n:0,until:0}}catch(e){return{n:0,until:0}}}
+function writeFails(f){try{localStorage.setItem(FAILS,JSON.stringify(f))}catch(e){}}
+function showLock(){
+  document.body.classList.add("locked");
+  const create=mode==="create";
+  $("lockMsg").textContent=create?"Crea un PIN de 6 a 8 dígitos para proteger tus datos.":"Escribe tu PIN para entrar.";
+  $("pin").placeholder=create?"PIN nuevo":"PIN";
+  $("pin2").hidden=!create;
+  $("unlockBtn").textContent=create?"Crear PIN":"Desbloquear";
+  $("forgot").hidden=create;
+  $("pin").value="";$("pin2").value="";
+  setTimeout(()=>$("pin").focus(),50);
+}
+function lock(){
+  if(!key)return;
+  key=null;salt=null;state=DEFAULT_STATE();
+  ["amt","note","inc","sav","curPin","newPin","newPin2"].forEach(id=>$(id).value="");
+  render();mode="unlock";$("lockErr").textContent="";showLock();
+}
+function unlocked(){
+  document.body.classList.remove("locked");
+  lastActive=Date.now();render();
+  $("status").textContent="Tus datos están cifrados en este dispositivo.";
+}
+async function submitPin(){
+  if(busy)return;
+  const pin=$("pin").value.trim();
+  $("lockErr").textContent="";
+  if(mode==="create"){
+    if(!/^\d{6,8}$/.test(pin)){$("lockErr").textContent="El PIN debe tener de 6 a 8 números.";return}
+    if(pin!==$("pin2").value.trim()){$("lockErr").textContent="Los PIN no coinciden.";return}
+  }else{
+    const f=readFails();
+    if(Date.now()<f.until){$("lockErr").textContent=`Demasiados intentos. Espera ${Math.ceil((f.until-Date.now())/1000)} segundos.`;return}
+    if(!pin){$("lockErr").textContent="Escribe tu PIN.";return}
+  }
+  busy=true;$("unlockBtn").disabled=true;$("unlockBtn").textContent=mode==="create"?"Creando…":"Abriendo…";
+  try{
+    if(mode==="create"){
+      salt=crypto.getRandomValues(new Uint8Array(16));
+      key=await deriveKey(pin,salt,ITER);
+      let legacy=null;try{legacy=JSON.parse(localStorage.getItem(LEGACY))}catch(e){}
+      state=Object.assign(DEFAULT_STATE(),legacy||{});
+      await persist();
+      if(readVault())localStorage.removeItem(LEGACY);
+      unlocked();
+    }else{
+      const v=readVault();
+      const s2=unb64(v.salt), k=await deriveKey(pin,s2,v.iter||ITER);
+      let data;
+      try{data=await unseal(v,k)}catch(e){
+        const f=readFails();f.n++;
+        if(f.n>=5)f.until=Date.now()+Math.min(15*60e3,30e3*2**(f.n-5));
+        writeFails(f);
+        $("lockErr").textContent=f.n>=5?`PIN incorrecto. Espera ${Math.round((f.until-Date.now())/1000)} segundos para intentar de nuevo.`:"PIN incorrecto.";
+        $("pin").value="";$("pin").focus();return;
+      }
+      writeFails({n:0,until:0});
+      key=k;salt=s2;state=Object.assign(DEFAULT_STATE(),data);
+      unlocked();
+    }
+  }catch(e){$("lockErr").textContent="No se pudo abrir. Asegúrate de usar la app desde su enlace https."}
+  finally{busy=false;$("unlockBtn").disabled=false;if(document.body.classList.contains("locked"))$("unlockBtn").textContent=mode==="create"?"Crear PIN":"Desbloquear"}
+}
+$("unlockBtn").onclick=submitPin;
+$("pin").addEventListener("keydown",e=>{if(e.key==="Enter")(mode==="create"?$("pin2").focus():submitPin())});
+$("pin2").addEventListener("keydown",e=>{if(e.key==="Enter")submitPin()});
+$("forgot").onclick=()=>{
+  if(!confirm("Sin tu PIN no hay forma de recuperar los datos. ¿Quieres BORRAR todo y empezar de cero?"))return;
+  if(!confirm("Última confirmación: se borrarán todos tus gastos de este dispositivo."))return;
+  localStorage.removeItem(VAULT);localStorage.removeItem(FAILS);
+  mode="create";$("lockErr").textContent="";showLock();
+};
+
+// bloqueo automático
+["pointerdown","keydown","touchstart"].forEach(ev=>document.addEventListener(ev,()=>{lastActive=Date.now()},{passive:true}));
+const limit=()=>(Number(state.autoLock)||5)*60e3;
+setInterval(()=>{if(key&&Date.now()-lastActive>limit())lock()},10e3);
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){hiddenAt=Date.now()}
+  else if(key&&hiddenAt&&Date.now()-hiddenAt>limit()){lock()}
+});
+$("autoLock").addEventListener("change",()=>{state.autoLock=Number($("autoLock").value);persist()});
+$("lockNow").onclick=lock;
+
+// cambiar PIN
+$("chgPin").onclick=async()=>{
+  const cur=$("curPin").value.trim(),n1=$("newPin").value.trim(),n2=$("newPin2").value.trim();
+  $("sErr").textContent="";
+  if(!/^\d{6,8}$/.test(n1)){$("sErr").textContent="El PIN nuevo debe tener de 6 a 8 números.";return}
+  if(n1!==n2){$("sErr").textContent="Los PIN nuevos no coinciden.";return}
+  $("chgPin").disabled=true;$("chgPin").textContent="Cambiando…";
+  try{
+    const v=readVault();
+    try{await unseal(v,await deriveKey(cur,unb64(v.salt),v.iter||ITER))}catch(e){$("sErr").textContent="El PIN actual no es correcto.";return}
+    salt=crypto.getRandomValues(new Uint8Array(16));
+    key=await deriveKey(n1,salt,ITER);
+    await persist();
+    ["curPin","newPin","newPin2"].forEach(id=>$(id).value="");
+    $("sErr").textContent="PIN cambiado. Descarga un respaldo nuevo: los anteriores siguen usando el PIN viejo.";
+  }finally{$("chgPin").disabled=false;$("chgPin").textContent="Cambiar PIN"}
+};
 
 /* ---------- respaldo ---------- */
-$("exp").onclick=()=>{
-  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+$("exp").onclick=async()=>{
+  await writing;
+  const v=localStorage.getItem(VAULT);
+  if(!v){$("bErr").textContent="Aún no hay datos para respaldar.";return}
+  const blob=new Blob([v],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
   a.download="mis-gastos-"+new Date().toISOString().slice(0,10)+".json";
   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  $("bErr").textContent="Respaldo descargado.";
+  $("bErr").textContent="Respaldo cifrado descargado.";
 };
 $("impBtn").onclick=()=>$("imp").click();
 $("imp").onchange=async()=>{
   const f=$("imp").files[0];if(!f)return;
+  $("bErr").textContent="";
   try{
-    const d=JSON.parse(await f.text());
+    let d=JSON.parse(await f.text());
+    if(d&&d.ct){
+      const p=prompt("Escribe el PIN que tenías cuando descargaste este respaldo:");
+      if(p===null){$("imp").value="";return}
+      try{d=await unseal(d,await deriveKey(p.trim(),unb64(d.salt),d.iter||ITER))}
+      catch(e){$("bErr").textContent="Ese PIN no abre este respaldo.";$("imp").value="";return}
+    }
     if(!d||!Array.isArray(d.expenses)||!Array.isArray(d.fixed))throw 0;
-    if(!confirm("Esto reemplaza tus datos actuales con los del respaldo. ¿Continuar?"))return;
-    state=Object.assign({income:0,payday:1,savingPct:10,fixed:[],expenses:[]},d);
-    persist();render();$("bErr").textContent="Respaldo restaurado.";
+    if(!confirm("Esto reemplaza tus datos actuales con los del respaldo. ¿Continuar?")){$("imp").value="";return}
+    state=Object.assign(DEFAULT_STATE(),d);
+    await persist();render();$("bErr").textContent="Respaldo restaurado.";
   }catch(e){$("bErr").textContent="Ese archivo no es un respaldo válido de Mis gastos."}
   $("imp").value="";
 };
+
+/* ---------- inicio ---------- */
+render();
+if(!window.crypto||!crypto.subtle){
+  $("lockMsg").textContent="Abre la app desde su enlace https para poder protegerla con PIN.";
+  $("pin").hidden=true;$("unlockBtn").hidden=true;
+}else{
+  mode=readVault()?"unlock":"create";
+  showLock();
+}
 
 /* ---------- app instalable ---------- */
 if("serviceWorker" in navigator){
