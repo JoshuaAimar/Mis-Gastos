@@ -1,4 +1,4 @@
-# Mis gastos (PWA)
+# Money Club (PWA)
 
 ## Publicar gratis en GitHub Pages
 1. Crea un repositorio público en GitHub, por ejemplo `mis-gastos`.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mis gastos</title>
+<title>Money Club</title>
 <meta name="theme-color" content="#FFFFFF">
 <meta name="description" content="Registro semanal de gastos">
 <link rel="manifest" href="manifest.webmanifest">
@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Mis gastos">
+<meta name="apple-mobile-web-app-title" content="Money Club">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,9 +19,9 @@
 <style>
 :root{
   --paper:#FFFFFF; --sheet:#F3F5F3; --ink:#0A0A0A; --muted:#5A615B; --line:#DCE1DC;
-  --gold:#39FF14; --gold-soft:#E6FFDF; --red:#D7263D; --green:#1E9E2C;
+  --gold:#02FF68; --gold-soft:#E6FFDF; --red:#D7263D; --green:#1E9E2C;
   --black:#0A0A0A; --on-black:#FFFFFF; --on-black-muted:#A7B1A8;
-  --glow:0 0 18px rgba(57,255,20,.45);
+  --glow:0 0 18px rgba(2,255,104,.45);
   color-scheme:light;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
@@ -128,10 +128,10 @@ body.locked .lock{display:flex}
 <div class="lock" id="lock">
   <div class="lock-in">
     <img src="icons/icon-192.png" alt="">
-    <h1>Mis gastos</h1>
+    <h1>Money Club</h1>
     <p id="lockMsg">Cargando…</p>
     <input class="pin" id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="PIN">
-    <input class="pin" id="pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="Confirma tu PIN" placeholder="Confirma" hidden>
+    <input class="pin" id="pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="Confirma tu PIN" placeholder="Confirma" hidden>
     <button class="btn" id="unlockBtn">Desbloquear</button>
     <p class="err" id="lockErr" role="alert"></p>
     <button class="linkbtn" id="forgot" hidden>Olvidé mi PIN</button>
@@ -220,8 +220,8 @@ body.locked .lock{display:flex}
   <div class="sec-grid">
     <label style="font-weight:600;margin-top:14px" for="curPin">Cambiar PIN</label>
     <input id="curPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="PIN actual">
-    <input id="newPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="PIN nuevo (6 a 8 dígitos)">
-    <input id="newPin2" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Confirma el PIN nuevo">
+    <input id="newPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="PIN nuevo (4 dígitos)">
+    <input id="newPin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="Confirma el PIN nuevo">
     <button class="btn" id="chgPin">Cambiar PIN</button>
   </div>
   <p class="err" id="sErr" role="status"></p>
@@ -418,8 +418,9 @@ function writeFails(f){try{localStorage.setItem(FAILS,JSON.stringify(f))}catch(e
 function showLock(){
   document.body.classList.add("locked");
   const create=mode==="create";
-  $("lockMsg").textContent=create?"Crea un PIN de 6 a 8 dígitos para proteger tus datos.":"Escribe tu PIN para entrar.";
+  $("lockMsg").textContent=create?"Crea un PIN de 4 dígitos para proteger tus datos.":"Escribe tu PIN para entrar.";
   $("pin").placeholder=create?"PIN nuevo":"PIN";
+  $("pin").maxLength=create?4:8;
   $("pin2").hidden=!create;
   $("unlockBtn").textContent=create?"Crear PIN":"Desbloquear";
   $("forgot").hidden=create;
@@ -442,7 +443,7 @@ async function submitPin(){
   const pin=$("pin").value.trim();
   $("lockErr").textContent="";
   if(mode==="create"){
-    if(!/^\d{6,8}$/.test(pin)){$("lockErr").textContent="El PIN debe tener de 6 a 8 números.";return}
+    if(!/^\d{4}$/.test(pin)){$("lockErr").textContent="El PIN debe tener 4 números.";return}
     if(pin!==$("pin2").value.trim()){$("lockErr").textContent="Los PIN no coinciden.";return}
   }else{
     const f=readFails();
@@ -502,7 +503,7 @@ $("lockNow").onclick=lock;
 $("chgPin").onclick=async()=>{
   const cur=$("curPin").value.trim(),n1=$("newPin").value.trim(),n2=$("newPin2").value.trim();
   $("sErr").textContent="";
-  if(!/^\d{6,8}$/.test(n1)){$("sErr").textContent="El PIN nuevo debe tener de 6 a 8 números.";return}
+  if(!/^\d{4}$/.test(n1)){$("sErr").textContent="El PIN nuevo debe tener 4 números.";return}
   if(n1!==n2){$("sErr").textContent="Los PIN nuevos no coinciden.";return}
   $("chgPin").disabled=true;$("chgPin").textContent="Cambiando…";
   try{
@@ -523,7 +524,7 @@ $("exp").onclick=async()=>{
   if(!v){$("bErr").textContent="Aún no hay datos para respaldar.";return}
   const blob=new Blob([v],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
-  a.download="mis-gastos-"+new Date().toISOString().slice(0,10)+".json";
+  a.download="money-club-"+new Date().toISOString().slice(0,10)+".json";
   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   $("bErr").textContent="Respaldo cifrado descargado.";
 };
@@ -543,7 +544,7 @@ $("imp").onchange=async()=>{
     if(!confirm("Esto reemplaza tus datos actuales con los del respaldo. ¿Continuar?")){$("imp").value="";return}
     state=Object.assign(DEFAULT_STATE(),d);
     await persist();render();$("bErr").textContent="Respaldo restaurado.";
-  }catch(e){$("bErr").textContent="Ese archivo no es un respaldo válido de Mis gastos."}
+  }catch(e){$("bErr").textContent="Ese archivo no es un respaldo válido de Money Club."}
   $("imp").value="";
 };
 

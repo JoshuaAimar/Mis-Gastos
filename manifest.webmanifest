@@ -1,6 +1,6 @@
 {
-  "name": "Mis gastos",
-  "short_name": "Mis gastos",
+  "name": "Money Club",
+  "short_name": "Money Club",
   "description": "Registro semanal de gastos y ahorro",
   "lang": "es-MX",
   "start_url": "./",
