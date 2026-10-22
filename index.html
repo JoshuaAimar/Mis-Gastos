@@ -172,6 +172,12 @@ body.home .topbar{display:none}
 .tile.wide small{margin-top:0}
 @media (prefers-reduced-motion:reduce){.tile{transition:none}}
 
+/* Créditos */
+.credit{font-size:12px;color:var(--muted);text-align:center;margin:18px 0 0;letter-spacing:.02em}
+.credit b{color:var(--ink);font-weight:600}
+.lock .credit{position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0px));margin:0;color:#6E776E}
+.lock .credit b{color:var(--gold)}
+
 /* Bloqueo */
 body.locked main, body.locked nav{display:none}
 .lock{position:fixed;inset:0;background:var(--black);color:var(--on-black);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));z-index:20}
@@ -205,6 +211,7 @@ body.locked .lock{display:flex}
     <p class="err" id="lockErr" role="alert"></p>
     <button class="linkbtn" id="forgot" hidden>Olvidé mi PIN</button>
   </div>
+  <p class="credit">Desarrollado por <b>Joshua Aimar</b></p>
 </div>
 <main class="wrap">
 <button class="topbar" id="homeBtn" aria-label="Ir al inicio"><img src="icons/icon-192.png" alt="">Money Club <small>· Inicio</small></button>
@@ -364,6 +371,7 @@ body.locked .lock{display:flex}
   </div>
   <p class="err" id="bErr" role="status"></p>
   <p class="status" id="status"></p>
+  <p class="credit">Money Club · Desarrollado por <b>Joshua Aimar</b> · 2026</p>
 </section>
 </main>
 
