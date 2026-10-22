@@ -103,6 +103,31 @@ section[hidden]{display:none}
 .status{font-size:13px;color:var(--muted);text-align:center;margin-top:26px}
 @media (prefers-reduced-motion:reduce){.meter span{transition:none}}
 
+/* Tarjetas */
+.cc{display:flex;gap:14px;align-items:flex-start;background:var(--sheet);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:10px}
+.cc img{width:52px;height:52px;border-radius:13px;flex:none}
+.cc-body{flex:1;min-width:0}
+.cc-body b{display:block;font-size:17px}
+.cc-body small{display:block;color:var(--muted)}
+.cc-amt{font-family:"Chakra Petch",Figtree,system-ui,sans-serif;font-size:30px;font-weight:700;line-height:1.15;margin:4px 0 2px}
+.due-soon{color:var(--red)!important;font-weight:600}
+.paid{color:var(--green)!important;font-weight:600}
+.pick{display:flex;gap:8px;margin:12px 0}
+.pick button{flex:1;display:flex;align-items:center;gap:8px;justify-content:center;border:1px solid var(--line);background:var(--paper);border-radius:14px;padding:8px;cursor:pointer;font-weight:600}
+.pick button img{width:28px;height:28px;border-radius:8px}
+.pick button[aria-pressed="true"]{border:2px solid var(--black);background:var(--gold-soft)}
+.seg{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.seg button{flex:1;border:0;background:var(--paper);padding:10px;cursor:pointer;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--black);color:var(--gold)}
+.cc-form input{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:11px 12px;margin-bottom:8px;min-width:0}
+.cc-form .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ul.list img.mini{width:30px;height:30px;border-radius:8px;flex:none}
+ul.list .amt.pay{color:var(--green)}
+.cfg{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:center;margin-top:10px}
+.cfg img{width:34px;height:34px;border-radius:9px}
+.cfg label{font-size:13px;color:var(--muted);display:block}
+.cfg input{width:100%;border:1px solid var(--line);background:var(--sheet);border-radius:10px;padding:9px 10px}
+
 /* Bloqueo */
 body.locked main, body.locked nav{display:none}
 .lock{position:fixed;inset:0;background:var(--black);color:var(--on-black);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));z-index:20}
@@ -176,6 +201,34 @@ body.locked .lock{display:flex}
   <ul class="list" id="monthList"></ul>
 </section>
 
+<section id="tarjetas" hidden>
+  <h2 style="margin-top:6px">Próximos pagos</h2>
+  <div id="ccTiles"></div>
+
+  <div class="add cc-form">
+    <label>Nuevo movimiento</label>
+    <div class="pick" id="ccPick" role="group" aria-label="Tarjeta"></div>
+    <div class="seg" role="group" aria-label="Tipo de movimiento">
+      <button id="tCompra" aria-pressed="true">Compra</button>
+      <button id="tPago" aria-pressed="false">Pago</button>
+    </div>
+    <input id="ccConcept" type="text" maxlength="60" placeholder="¿Qué fue? Ej. Tenis, gasolina">
+    <div class="two">
+      <input id="ccDate" type="date" aria-label="Fecha">
+      <input id="ccAmt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Monto $" aria-label="Monto">
+    </div>
+    <button class="btn" id="ccSave" style="width:100%">Guardar movimiento</button>
+    <p class="err" id="ccErr" role="status"></p>
+  </div>
+
+  <h2>Movimientos</h2>
+  <ul class="list" id="ccList"></ul>
+
+  <h2>Fechas de tus tarjetas</h2>
+  <p class="hint" style="margin-top:-4px">El día de corte viene en tu estado de cuenta como "Fecha de corte".</p>
+  <div id="ccCfg"></div>
+</section>
+
 <section id="ajustes" hidden>
   <h2 style="margin-top:6px">Tu ingreso</h2>
   <div class="field">
@@ -241,6 +294,7 @@ body.locked .lock{display:flex}
 <nav><div class="in">
   <button data-tab="semana" aria-current="page">Semana</button>
   <button data-tab="mes">Mes</button>
+  <button data-tab="tarjetas">Tarjetas</button>
   <button data-tab="ajustes">Ajustes</button>
 </div></nav>
 
@@ -257,7 +311,7 @@ let cat=CATS[0];
 /* ---------- almacenamiento cifrado ---------- */
 const LEGACY="mis-gastos", VAULT="mis-gastos-vault", FAILS="mis-gastos-fails";
 const ITER=600000;
-const DEFAULT_STATE=()=>({income:0,payday:1,savingPct:10,autoLock:5,fixed:[],expenses:[]});
+const DEFAULT_STATE=()=>({income:0,payday:1,savingPct:10,autoLock:5,fixed:[],expenses:[],cards:{},cardMoves:[]});
 let key=null, salt=null, writing=Promise.resolve();
 const enc=new TextEncoder(), dec=new TextDecoder();
 function b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)}
@@ -379,7 +433,135 @@ function render(){
     d.onclick=()=>{state.fixed=state.fixed.filter(x=>x.id!==f.id);persist();render()};
     el.append(w,a,d);fl.append(el);
   });
+  renderCards();
 }
+
+/* ---------- tarjetas ---------- */
+const CARDS=[
+  {id:"banamex",name:"Banamex",logo:"icons/banamex.png",def:{pay:10,cut:8}},
+  {id:"bancoppel",name:"BanCoppel",logo:"icons/bancoppel.png",def:{pay:16,cut:19}}
+];
+let ccSel="banamex", ccType="compra";
+function cfg(id){
+  if(!state.cards)state.cards={};
+  const c=CARDS.find(x=>x.id===id);
+  const saved=state.cards[id]||{}, merged=Object.assign({},c.def);
+  ["pay","cut"].forEach(f=>{if(saved[f])merged[f]=saved[f]});
+  state.cards[id]=merged;
+  return state.cards[id];
+}
+const dim=(y,m)=>new Date(y,m+1,0).getDate();
+function mkDate(y,m,d){const b=new Date(y,m,1);return new Date(b.getFullYear(),b.getMonth(),Math.min(d,dim(b.getFullYear(),b.getMonth())))}
+const today0=()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate())};
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const parseIso=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+// corte que incluye una compra hecha en "date" (el día de corte cuenta en ese corte)
+function cutFor(date,cut){const c=mkDate(date.getFullYear(),date.getMonth(),cut);return date<=c?c:mkDate(date.getFullYear(),date.getMonth()+1,cut)}
+// primer día de pago después de un corte
+function payAfter(cutDate,pay){let d=mkDate(cutDate.getFullYear(),cutDate.getMonth(),pay);if(d<=cutDate)d=mkDate(cutDate.getFullYear(),cutDate.getMonth()+1,pay);return d}
+function dueForPurchase(c,date){return payAfter(cutFor(date,c.cut),c.pay)}
+// siguiente fecha límite de pago a partir de "date"
+function nextDue(c,date){
+  let last=mkDate(date.getFullYear(),date.getMonth(),c.cut);
+  if(!(last<date))last=mkDate(date.getFullYear(),date.getMonth()-1,c.cut);
+  let d=payAfter(last,c.pay);
+  if(d<date)d=dueForPurchase(c,date);
+  return d;
+}
+function moveDue(m){const c=cfg(m.card);if(!c.cut||!c.pay)return null;const d=parseIso(m.date);return m.type==="pago"?nextDue(c,d):dueForPurchase(c,d)}
+const shortFmt=new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short"});
+function renderCards(){
+  if(!state.cardMoves)state.cardMoves=[];
+  const t=today0();
+  // tiles
+  const tiles=$("ccTiles");tiles.innerHTML="";
+  CARDS.forEach(card=>{
+    const c=cfg(card.id);
+    const el=document.createElement("div");el.className="cc";
+    const img=document.createElement("img");img.src=card.logo;img.alt="";
+    const body=document.createElement("div");body.className="cc-body";
+    const name=document.createElement("b");name.textContent=card.name;body.append(name);
+    if(!c.cut||!c.pay){
+      const sm=document.createElement("small");sm.textContent="Agrega tu día de corte abajo para calcular tus pagos.";body.append(sm);
+    }else{
+      const totals={};
+      state.cardMoves.filter(m=>m.card===card.id).forEach(m=>{const d=moveDue(m);if(!d)return;const k=iso(d);totals[k]=(totals[k]||0)+(m.type==="pago"?-m.amount:m.amount)});
+      const nd=nextDue(c,t), nk=iso(nd), net=totals[nk]||0;
+      const days=Math.round((nd-t)/864e5);
+      const when=document.createElement("small");
+      when.textContent=`Próximo pago: ${shortFmt.format(nd)} · `+(days===0?"¡es hoy!":days===1?"mañana":`en ${days} días`);
+      const amt=document.createElement("div");amt.className="cc-amt";amt.textContent=money(Math.max(0,net));
+      const st=document.createElement("small");
+      const hasCharges=state.cardMoves.some(m=>m.card===card.id&&m.type==="compra"&&moveDue(m)&&iso(moveDue(m))===nk);
+      if(net<=0&&hasCharges){st.textContent="Pagado ✓";st.className="paid"}
+      else if(net>0&&days<=3){st.textContent="Paga pronto para evitar intereses.";st.className="due-soon"}
+      body.append(when,amt);
+      if(st.textContent)body.append(st);
+      const later=Object.entries(totals).filter(([k,v])=>k>nk&&v>0).sort();
+      later.slice(0,2).forEach(([k,v])=>{const sm=document.createElement("small");sm.textContent=`Después: ${shortFmt.format(parseIso(k))} · ${money(v)}`;body.append(sm)});
+    }
+    el.append(img,body);tiles.append(el);
+  });
+  // selector de tarjeta
+  const pk=$("ccPick");pk.innerHTML="";
+  CARDS.forEach(card=>{
+    const b=document.createElement("button");b.setAttribute("aria-pressed",card.id===ccSel);
+    const i=document.createElement("img");i.src=card.logo;i.alt="";
+    b.append(i,document.createTextNode(card.name));
+    b.onclick=()=>{ccSel=card.id;renderCards()};pk.append(b);
+  });
+  $("tCompra").setAttribute("aria-pressed",ccType==="compra");
+  $("tPago").setAttribute("aria-pressed",ccType==="pago");
+  $("ccConcept").placeholder=ccType==="pago"?"Ej. Pago quincena (opcional)":"¿Qué fue? Ej. Tenis, gasolina";
+  if(!$("ccDate").value)$("ccDate").value=iso(t);
+  // lista
+  const ul=$("ccList");ul.innerHTML="";
+  const moves=[...state.cardMoves].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  if(!moves.length)ul.innerHTML='<li class="empty">Aún no registras movimientos de tus tarjetas.</li>';
+  moves.forEach(m=>{
+    const card=CARDS.find(x=>x.id===m.card);
+    const li=document.createElement("li");
+    const img=document.createElement("img");img.className="mini";img.src=card.logo;img.alt=card.name;
+    const w=document.createElement("div");w.className="what";
+    const b=document.createElement("b");b.textContent=m.concept||(m.type==="pago"?"Pago a la tarjeta":"Compra");
+    const sm=document.createElement("small");const d=moveDue(m);
+    sm.textContent=shortFmt.format(parseIso(m.date))+(m.type==="pago"?" · Pago":d?` · Se paga el ${shortFmt.format(d)}`:"");
+    w.append(b,sm);
+    const a=document.createElement("span");a.className="amt"+(m.type==="pago"?" pay":"");a.textContent=(m.type==="pago"?"−":"")+money(m.amount);
+    const del=document.createElement("button");del.className="del";del.textContent="×";del.setAttribute("aria-label","Borrar movimiento "+b.textContent);
+    del.onclick=()=>{if(!confirm("¿Borrar este movimiento?"))return;state.cardMoves=state.cardMoves.filter(x=>x.id!==m.id);persist();render()};
+    li.append(img,w,a,del);ul.append(li);
+  });
+  // configuración
+  const cf=$("ccCfg");
+  if(!cf.dataset.built){
+    cf.dataset.built="1";
+    CARDS.forEach(card=>{
+      const row=document.createElement("div");row.className="cfg";
+      row.innerHTML=`<img src="${card.logo}" alt="${card.name}"><div><label for="pay-${card.id}">Día de pago</label><input id="pay-${card.id}" type="number" inputmode="numeric" min="1" max="31"></div><div><label for="cut-${card.id}">Día de corte</label><input id="cut-${card.id}" type="number" inputmode="numeric" min="1" max="31" placeholder="Ej. 15"></div>`;
+      cf.append(row);
+      ["pay","cut"].forEach(f=>row.querySelector(`#${f}-${card.id}`).addEventListener("change",e=>{
+        const v=parseInt(e.target.value,10);
+        cfg(card.id)[f]=(v>=1&&v<=31)?v:null;persist();render();
+      }));
+    });
+  }
+  CARDS.forEach(card=>{const c=cfg(card.id);
+    ["pay","cut"].forEach(f=>{const i=$(`${f}-${card.id}`);if(document.activeElement!==i)i.value=c[f]||""})});
+}
+$("tCompra").onclick=()=>{ccType="compra";renderCards()};
+$("tPago").onclick=()=>{ccType="pago";renderCards()};
+$("ccSave").onclick=()=>{
+  const v=parseFloat($("ccAmt").value), d=$("ccDate").value;
+  if(!d){$("ccErr").textContent="Elige la fecha.";return}
+  if(!(v>0)){$("ccErr").textContent="Escribe un monto mayor a cero.";$("ccAmt").focus();return}
+  state.cardMoves.push({id:uid(),card:ccSel,type:ccType,concept:$("ccConcept").value.trim(),date:d,amount:v});
+  $("ccConcept").value="";$("ccAmt").value="";$("ccDate").value=iso(today0());
+  $("ccErr").textContent="Movimiento guardado.";
+  setTimeout(()=>{if($("ccErr").textContent==="Movimiento guardado.")$("ccErr").textContent=""},1800);
+  persist();render();
+};
+$("ccAmt").addEventListener("keydown",e=>{if(e.key==="Enter")$("ccSave").click()});
 
 /* ---------- actions ---------- */
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -430,7 +612,7 @@ function showLock(){
 function lock(){
   if(!key)return;
   key=null;salt=null;state=DEFAULT_STATE();
-  ["amt","note","inc","sav","curPin","newPin","newPin2"].forEach(id=>$(id).value="");
+  ["amt","note","inc","sav","curPin","newPin","newPin2","ccConcept","ccAmt"].forEach(id=>$(id).value="");
   render();mode="unlock";$("lockErr").textContent="";showLock();
 }
 function unlocked(){
