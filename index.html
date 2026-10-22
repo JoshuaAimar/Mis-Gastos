@@ -121,7 +121,8 @@ section[hidden]{display:none}
 .seg button[aria-pressed="true"]{background:var(--black);color:var(--gold)}
 .cc-form input{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:11px 12px;margin-bottom:8px;min-width:0}
 .cc-form .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-ul.list img.mini{width:30px;height:30px;border-radius:8px;flex:none}
+.cc-head{display:flex;align-items:center;gap:10px}
+.cc-head img{width:30px;height:30px;border-radius:8px}
 ul.list .amt.pay{color:var(--green)}
 .cfg{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:center;margin-top:10px}
 .cfg img{width:34px;height:34px;border-radius:9px}
@@ -221,8 +222,7 @@ body.locked .lock{display:flex}
     <p class="err" id="ccErr" role="status"></p>
   </div>
 
-  <h2>Movimientos</h2>
-  <ul class="list" id="ccList"></ul>
+  <div id="ccLists"></div>
 
   <h2>Fechas de tus tarjetas</h2>
   <p class="hint" style="margin-top:-4px">El día de corte viene en tu estado de cuenta como "Fecha de corte".</p>
@@ -312,7 +312,7 @@ let cat=CATS[0];
 const LEGACY="mis-gastos", VAULT="mis-gastos-vault", FAILS="mis-gastos-fails";
 const ITER=600000;
 const DEFAULT_STATE=()=>({income:0,payday:1,savingPct:10,autoLock:5,fixed:[],expenses:[],cards:{},cardMoves:[]});
-let key=null, salt=null, writing=Promise.resolve();
+let key=null, salt=null, pinLen=null, writing=Promise.resolve();
 const enc=new TextEncoder(), dec=new TextDecoder();
 function b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)}
 const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
@@ -332,9 +332,10 @@ async function unseal(v,k){
 function readVault(){try{const v=localStorage.getItem(VAULT);return v?JSON.parse(v):null}catch(e){return null}}
 function persist(){
   if(!key)return;
-  const snap=JSON.parse(JSON.stringify(state)), k=key, sl=salt;
+  const snap=JSON.parse(JSON.stringify(state)), k=key, sl=salt, pl=pinLen;
   writing=writing.then(async()=>{
     const v=await seal(snap,k,sl);
+    if(pl)v.len=pl;
     localStorage.setItem(VAULT,JSON.stringify(v));
     $("status").textContent="Guardado y cifrado en este dispositivo.";
   }).catch(()=>{$("status").textContent="No se pudo guardar. Revisa que el navegador permita almacenamiento."});
@@ -514,23 +515,28 @@ function renderCards(){
   $("tPago").setAttribute("aria-pressed",ccType==="pago");
   $("ccConcept").placeholder=ccType==="pago"?"Ej. Pago quincena (opcional)":"¿Qué fue? Ej. Tenis, gasolina";
   if(!$("ccDate").value)$("ccDate").value=iso(t);
-  // lista
-  const ul=$("ccList");ul.innerHTML="";
-  const moves=[...state.cardMoves].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-  if(!moves.length)ul.innerHTML='<li class="empty">Aún no registras movimientos de tus tarjetas.</li>';
-  moves.forEach(m=>{
-    const card=CARDS.find(x=>x.id===m.card);
-    const li=document.createElement("li");
-    const img=document.createElement("img");img.className="mini";img.src=card.logo;img.alt=card.name;
-    const w=document.createElement("div");w.className="what";
-    const b=document.createElement("b");b.textContent=m.concept||(m.type==="pago"?"Pago a la tarjeta":"Compra");
-    const sm=document.createElement("small");const d=moveDue(m);
-    sm.textContent=shortFmt.format(parseIso(m.date))+(m.type==="pago"?" · Pago":d?` · Se paga el ${shortFmt.format(d)}`:"");
-    w.append(b,sm);
-    const a=document.createElement("span");a.className="amt"+(m.type==="pago"?" pay":"");a.textContent=(m.type==="pago"?"−":"")+money(m.amount);
-    const del=document.createElement("button");del.className="del";del.textContent="×";del.setAttribute("aria-label","Borrar movimiento "+b.textContent);
-    del.onclick=()=>{if(!confirm("¿Borrar este movimiento?"))return;state.cardMoves=state.cardMoves.filter(x=>x.id!==m.id);persist();render()};
-    li.append(img,w,a,del);ul.append(li);
+  // listas separadas por tarjeta
+  const box=$("ccLists");box.innerHTML="";
+  CARDS.forEach(card=>{
+    const h=document.createElement("h2");h.className="cc-head";
+    const hi=document.createElement("img");hi.src=card.logo;hi.alt="";
+    h.append(hi,document.createTextNode("Movimientos "+card.name));
+    const ul=document.createElement("ul");ul.className="list";
+    const moves=state.cardMoves.filter(m=>m.card===card.id).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+    if(!moves.length)ul.innerHTML='<li class="empty">Sin movimientos todavía.</li>';
+    moves.forEach(m=>{
+      const li=document.createElement("li");
+      const w=document.createElement("div");w.className="what";
+      const b=document.createElement("b");b.textContent=m.concept||(m.type==="pago"?"Pago a la tarjeta":"Compra");
+      const sm=document.createElement("small");const d=moveDue(m);
+      sm.textContent=shortFmt.format(parseIso(m.date))+(m.type==="pago"?" · Pago":d?` · Se paga el ${shortFmt.format(d)}`:"");
+      w.append(b,sm);
+      const a=document.createElement("span");a.className="amt"+(m.type==="pago"?" pay":"");a.textContent=(m.type==="pago"?"−":"")+money(m.amount);
+      const del=document.createElement("button");del.className="del";del.textContent="×";del.setAttribute("aria-label","Borrar movimiento "+b.textContent);
+      del.onclick=()=>{if(!confirm("¿Borrar este movimiento?"))return;state.cardMoves=state.cardMoves.filter(x=>x.id!==m.id);persist();render()};
+      li.append(w,a,del);ul.append(li);
+    });
+    box.append(h,ul);
   });
   // configuración
   const cf=$("ccCfg");
@@ -636,7 +642,7 @@ async function submitPin(){
   try{
     if(mode==="create"){
       salt=crypto.getRandomValues(new Uint8Array(16));
-      key=await deriveKey(pin,salt,ITER);
+      key=await deriveKey(pin,salt,ITER);pinLen=pin.length;
       let legacy=null;try{legacy=JSON.parse(localStorage.getItem(LEGACY))}catch(e){}
       state=Object.assign(DEFAULT_STATE(),legacy||{});
       await persist();
@@ -654,7 +660,8 @@ async function submitPin(){
         $("pin").value="";$("pin").focus();return;
       }
       writeFails({n:0,until:0});
-      key=k;salt=s2;state=Object.assign(DEFAULT_STATE(),data);
+      key=k;salt=s2;pinLen=pin.length;state=Object.assign(DEFAULT_STATE(),data);
+      if(v.len!==pinLen)persist();
       unlocked();
     }
   }catch(e){$("lockErr").textContent="No se pudo abrir. Asegúrate de usar la app desde su enlace https."}
@@ -663,6 +670,18 @@ async function submitPin(){
 $("unlockBtn").onclick=submitPin;
 $("pin").addEventListener("keydown",e=>{if(e.key==="Enter")(mode==="create"?$("pin2").focus():submitPin())});
 $("pin2").addEventListener("keydown",e=>{if(e.key==="Enter")submitPin()});
+// entrar solo al escribir el PIN completo
+["pin","pin2"].forEach(id=>$(id).addEventListener("input",()=>{
+  const el=$(id);el.value=el.value.replace(/\D/g,"");
+  if(busy)return;
+  if(mode==="create"){
+    if(id==="pin"&&el.value.length===4)$("pin2").focus();
+    else if(id==="pin2"&&el.value.length===4)submitPin();
+  }else if(id==="pin"){
+    const v=readVault();
+    if(v&&v.len&&el.value.length===v.len)submitPin();
+  }
+}));
 $("forgot").onclick=()=>{
   if(!confirm("Sin tu PIN no hay forma de recuperar los datos. ¿Quieres BORRAR todo y empezar de cero?"))return;
   if(!confirm("Última confirmación: se borrarán todos tus gastos de este dispositivo."))return;
@@ -692,7 +711,7 @@ $("chgPin").onclick=async()=>{
     const v=readVault();
     try{await unseal(v,await deriveKey(cur,unb64(v.salt),v.iter||ITER))}catch(e){$("sErr").textContent="El PIN actual no es correcto.";return}
     salt=crypto.getRandomValues(new Uint8Array(16));
-    key=await deriveKey(n1,salt,ITER);
+    key=await deriveKey(n1,salt,ITER);pinLen=n1.length;
     await persist();
     ["curPin","newPin","newPin2"].forEach(id=>$(id).value="");
     $("sErr").textContent="PIN cambiado. Descarga un respaldo nuevo: los anteriores siguen usando el PIN viejo.";
