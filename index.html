@@ -143,6 +143,35 @@ ul.shop li.done .box{background:var(--gold);border-color:var(--black);color:var(
 ul.shop li.done .name{text-decoration:line-through;color:var(--muted)}
 .shop-sep{color:var(--muted);font-size:14px;font-weight:600;padding:16px 0 4px}
 
+/* Inicio */
+.topbar{display:flex;align-items:center;gap:10px;margin:0 0 16px;background:none;border:0;padding:4px 0;cursor:pointer;font-family:"Chakra Petch",Figtree,system-ui,sans-serif;font-weight:700;font-size:18px;color:var(--ink)}
+.topbar img{width:34px;height:34px;border-radius:9px}
+.topbar small{font-family:Figtree,system-ui,sans-serif;font-weight:600;font-size:13px;color:var(--muted);margin-left:2px}
+body.home .topbar{display:none}
+.welcome{background:var(--black);color:var(--on-black);border-radius:22px;padding:22px 20px;position:relative;overflow:hidden}
+.welcome::after{content:"";position:absolute;right:-50px;top:-50px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(2,255,104,.35),transparent 70%)}
+.welcome .hi{margin:0;color:var(--on-black-muted);font-weight:600}
+.welcome h1{margin:2px 0 6px;font-size:clamp(28px,8.5vw,38px);line-height:1.1;color:#fff;font-family:"Chakra Petch",Figtree,system-ui,sans-serif}
+.welcome h1 span{color:var(--gold)}
+.welcome .tag{margin:0 0 14px;color:var(--on-black-muted)}
+.stat{display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-top:1px solid #262A26;padding:10px 0 0;margin-top:10px;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;color:inherit;cursor:pointer;text-align:left;font-size:15px;position:relative;z-index:1}
+.stat b{font-family:"Chakra Petch",Figtree,system-ui,sans-serif;font-size:20px;color:var(--gold);white-space:nowrap}
+.stat b.warn{color:#FF4D5E}
+.tip{display:flex;gap:12px;align-items:flex-start;background:var(--gold-soft);border:1px solid var(--line);border-radius:16px;padding:14px;margin:14px 0 4px}
+.tip .tip-ico{font-size:22px;line-height:1}
+.tip p{margin:0;font-size:15px}
+.tip p b{display:block;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:10px;background:var(--sheet);border:1px solid var(--line);border-radius:20px;padding:16px;cursor:pointer;text-align:left;transition:transform .15s,border-color .15s}
+.tile:hover{border-color:var(--black)}
+.tile:active{transform:scale(.97)}
+.tile img{width:58px;height:58px;border-radius:15px}
+.tile b{font-size:17px}
+.tile small{color:var(--muted);font-size:13px;margin-top:-8px}
+.tile.wide{grid-column:1/-1;flex-direction:row;align-items:center}
+.tile.wide small{margin-top:0}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}}
+
 /* Bloqueo */
 body.locked main, body.locked nav{display:none}
 .lock{position:fixed;inset:0;background:var(--black);color:var(--on-black);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));z-index:20}
@@ -164,7 +193,7 @@ body.locked .lock{display:flex}
 .sec-grid input{border:1px solid var(--line);background:var(--sheet);border-radius:12px;padding:11px 12px;min-width:0;width:100%}
 </style>
 </head>
-<body class="locked">
+<body class="locked home">
 <div class="lock" id="lock">
   <div class="lock-in">
     <img src="icons/icon-192.png" alt="">
@@ -178,8 +207,27 @@ body.locked .lock{display:flex}
   </div>
 </div>
 <main class="wrap">
+<button class="topbar" id="homeBtn" aria-label="Ir al inicio"><img src="icons/icon-192.png" alt="">Money Club <small>· Inicio</small></button>
 
-<section id="semana">
+<section id="inicio">
+  <div class="welcome">
+    <p class="hi" id="hiTime">Hola</p>
+    <h1 id="hiName">Joshua Aimar</h1>
+    <p class="tag" id="hiTag"></p>
+    <button class="stat" data-go="semana"><span>Te queda esta semana</span><b id="hsLeft">$0</b></button>
+    <button class="stat" data-go="tarjetas"><span id="hsCardLbl">Próximo pago de tarjeta</span><b id="hsCard">—</b></button>
+  </div>
+  <div class="tip"><span class="tip-ico" aria-hidden="true">💡</span><p><b>Tip del día</b><span id="tipText"></span></p></div>
+  <div class="grid">
+    <button class="tile" data-go="semana"><img src="icons/sec-semana.svg" alt=""><b>Semana</b><small id="tsSemana">Tus gastos</small></button>
+    <button class="tile" data-go="mes"><img src="icons/sec-mes.svg" alt=""><b>Mes</b><small id="tsMes">Tu resumen</small></button>
+    <button class="tile" data-go="tarjetas"><img src="icons/sec-tarjetas.svg" alt=""><b>Tarjetas</b><small id="tsTarjetas">Banamex y BanCoppel</small></button>
+    <button class="tile" data-go="super"><img src="icons/sec-hygiene.svg" alt=""><b>Hygiene</b><small id="tsSuper">Tu lista</small></button>
+    <button class="tile wide" data-go="ajustes"><img src="icons/sec-ajustes.svg" alt=""><div><b>Ajustes</b><br><small>Ingreso, PIN y respaldo</small></div></button>
+  </div>
+</section>
+
+<section id="semana" hidden>
   <div class="hero">
     <p id="heroLabel">Te queda esta semana</p>
     <div class="big num" id="left">$0</div>
@@ -320,7 +368,7 @@ body.locked .lock{display:flex}
 </main>
 
 <nav><div class="in">
-  <button data-tab="semana" aria-current="page">Semana</button>
+  <button data-tab="semana">Semana</button>
   <button data-tab="mes">Mes</button>
   <button data-tab="tarjetas">Tarjetas</button>
   <button data-tab="super">Hygiene</button>
@@ -663,12 +711,70 @@ $("fAdd").onclick=()=>{
   $("fName").value="";$("fAmt").value="";$("fErr").textContent="";
   persist();render();
 };
-document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll("nav button").forEach(x=>x.removeAttribute("aria-current"));
-  b.setAttribute("aria-current","page");
-  document.querySelectorAll("main section").forEach(s=>s.hidden=s.id!==b.dataset.tab);
+function showTab(id){
+  document.querySelectorAll("nav button").forEach(x=>{if(x.dataset.tab===id)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});
+  document.querySelectorAll("main section").forEach(s=>s.hidden=s.id!==id);
+  document.body.classList.toggle("home",id==="inicio");
+  if(id==="inicio")renderHome();
   window.scrollTo(0,0);
-});
+}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showTab(b.dataset.go));
+$("homeBtn").onclick=()=>showTab("inicio");
+
+/* ---------- inicio ---------- */
+const NAME="Joshua Aimar";
+const TAGS=["Bienvenido de vuelta al club 💚","Tu dinero, tus reglas.","Cada peso registrado cuenta.","Hoy es buen día para ahorrar.","El club te estaba esperando.","Pequeños pasos, grandes ahorros."];
+const TIPS=[
+  "Págate primero: aparta tu ahorro el mismo día que cobras.",
+  "Antes de comprar algo que no planeabas, espera 24 horas. Si aún lo quieres, adelante.",
+  "Paga el total de tu tarjeta antes de la fecha límite y evitas intereses.",
+  "Revisa tus suscripciones: ¿todas las usas cada mes?",
+  "Un fondo de emergencia empieza con poco. Lo importante es empezar.",
+  "Usa la tarjeta solo para lo que podrías pagar en efectivo hoy.",
+  "Registrar tus gastos el mismo día es más fácil que acordarte después.",
+  "Los gastos hormiga (snacks, refrescos, antojos) suman más de lo que parece.",
+  "Compra con lista: así gastas en lo que necesitas, no en lo que ves.",
+  "Si te sobra dinero esta semana, mándalo al ahorro antes de gastarlo.",
+  "Compara precios entre tiendas en las cosas que compras siempre.",
+  "Una meta concreta (cuánto y para cuándo) motiva más que solo 'ahorrar'."
+];
+function dayIndex(){const n=new Date();return Math.floor((new Date(n.getFullYear(),n.getMonth(),n.getDate())-new Date(n.getFullYear(),0,1))/864e5)}
+function renderHome(){
+  const h=new Date().getHours();
+  $("hiTime").textContent=h<12?"Buenos días ☀️":h<19?"Buenas tardes 🌤️":"Buenas noches 🌙";
+  $("hiName").innerHTML="";$("hiName").append(NAME.split(" ")[0]+" ");
+  const sp=document.createElement("span");sp.textContent=NAME.split(" ").slice(1).join(" ");$("hiName").append(sp);
+  $("hiTag").textContent=TAGS[dayIndex()%TAGS.length];
+  $("tipText").textContent=TIPS[dayIndex()%TIPS.length];
+  // semana
+  const week=state.expenses.filter(e=>inThisWeek(e.t));
+  const left=state.income-weeklySaving()-weeklyFixed()-week.reduce((a,e)=>a+e.amount,0);
+  $("hsLeft").textContent=state.income>0?money(left):"Configura tu ingreso";
+  $("hsLeft").classList.toggle("warn",state.income>0&&left<0);
+  $("tsSemana").textContent=week.length?`${week.length} gasto${week.length===1?"":"s"} esta semana`:"Sin gastos esta semana";
+  const month=state.expenses.filter(e=>inThisMonth(e.t));
+  $("tsMes").textContent=money(month.reduce((a,e)=>a+e.amount,0))+" este mes";
+  // tarjetas: el pago más próximo con saldo
+  const t=today0();let best=null;
+  CARDS.forEach(card=>{
+    const c=cfg(card.id);const nd=nextDue(c,t),nk=iso(nd);
+    const net=(state.cardMoves||[]).filter(m=>m.card===card.id).reduce((a,m)=>{const d=moveDue(m);return d&&iso(d)===nk?a+(m.type==="pago"?-m.amount:m.amount):a},0);
+    if(net>0&&(!best||nd<best.nd))best={card,nd,net};
+  });
+  if(best){
+    const days=Math.round((best.nd-t)/864e5);
+    $("hsCardLbl").textContent=`${best.card.name} · ${days===0?"hoy":days===1?"mañana":"en "+days+" días"}`;
+    $("hsCard").textContent=money(best.net);$("hsCard").classList.toggle("warn",days<=3);
+    $("tsTarjetas").textContent=`Próximo: ${shortFmt.format(best.nd)}`;
+  }else{
+    $("hsCardLbl").textContent="Tarjetas";$("hsCard").textContent="Al corriente ✓";$("hsCard").classList.remove("warn");
+    $("tsTarjetas").textContent="Sin pagos pendientes";
+  }
+  const shop=Array.isArray(state.shop)?state.shop:[];
+  const pend=shop.filter(x=>!x.done).length;
+  $("tsSuper").textContent=shop.length?(pend?`${pend} por comprar`:"Todo comprado ✓"):"Tu lista";
+}
 
 /* ---------- bloqueo ---------- */
 let mode="unlock", busy=false, lastActive=Date.now(), hiddenAt=0;
@@ -694,7 +800,7 @@ function lock(){
 }
 function unlocked(){
   document.body.classList.remove("locked");
-  lastActive=Date.now();render();
+  lastActive=Date.now();render();showTab("inicio");
   $("status").textContent="Tus datos están cifrados en este dispositivo.";
 }
 async function submitPin(){
