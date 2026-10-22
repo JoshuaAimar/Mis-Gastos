@@ -1,5 +1,5 @@
 // Cambia la versión cada vez que actualices los archivos para que el celular descargue lo nuevo.
-const VERSION = "mis-gastos-v8";
+const VERSION = "mis-gastos-v9";
 const CORE = ["./", "./index.html", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png",
   "./icons/banamex.png", "./icons/bancoppel.png"];
