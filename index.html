@@ -129,6 +129,20 @@ ul.list .amt.pay{color:var(--green)}
 .cfg .lbl{font-size:13px;color:var(--muted);display:block}
 .cfg b{display:block;background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-weight:600}
 
+/* Súper */
+.shop-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 10px;margin:6px 0 4px}
+.shop-top h2{margin:0;white-space:nowrap;font-size:21px}
+.shop-top .btn{white-space:nowrap;padding:7px 12px;font-size:14px}
+nav button{font-size:14px}
+.progress{color:var(--muted);margin:0 0 14px}
+ul.shop{list-style:none;margin:0;padding:0}
+ul.shop li{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+ul.shop .tick{flex:1;display:flex;align-items:center;gap:12px;background:none;border:0;padding:14px 0;cursor:pointer;text-align:left;font-size:17px;min-width:0}
+ul.shop .box{width:26px;height:26px;border-radius:8px;border:2px solid var(--ink);flex:none;display:grid;place-items:center;font-weight:800;font-size:16px}
+ul.shop li.done .box{background:var(--gold);border-color:var(--black);color:var(--black)}
+ul.shop li.done .name{text-decoration:line-through;color:var(--muted)}
+.shop-sep{color:var(--muted);font-size:14px;font-weight:600;padding:16px 0 4px}
+
 /* Bloqueo */
 body.locked main, body.locked nav{display:none}
 .lock{position:fixed;inset:0;background:var(--black);color:var(--on-black);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));z-index:20}
@@ -229,6 +243,20 @@ body.locked .lock{display:flex}
   <div id="ccCfg"></div>
 </section>
 
+<section id="super" hidden>
+  <div class="shop-top">
+    <h2>Personal Hygiene</h2>
+    <button class="btn ghost" id="shopReset">Nueva compra</button>
+  </div>
+  <p class="progress" id="shopProg"></p>
+  <ul class="shop" id="shopList"></ul>
+  <div class="row" style="margin-top:16px">
+    <input id="shopNew" type="text" maxlength="40" placeholder="Agregar algo a la lista">
+    <button class="btn" id="shopAdd">Agregar</button>
+  </div>
+  <p class="err" id="shopErr" role="status"></p>
+</section>
+
 <section id="ajustes" hidden>
   <h2 style="margin-top:6px">Tu ingreso</h2>
   <div class="field">
@@ -295,6 +323,7 @@ body.locked .lock{display:flex}
   <button data-tab="semana" aria-current="page">Semana</button>
   <button data-tab="mes">Mes</button>
   <button data-tab="tarjetas">Tarjetas</button>
+  <button data-tab="super">Hygiene</button>
   <button data-tab="ajustes">Ajustes</button>
 </div></nav>
 
@@ -312,6 +341,7 @@ let cat=CATS[0];
 const LEGACY="mis-gastos", VAULT="mis-gastos-vault", FAILS="mis-gastos-fails";
 const ITER=600000;
 const DEFAULT_STATE=()=>({income:0,payday:1,savingPct:10,autoLock:5,fixed:[],expenses:[],cards:{},cardMoves:[]});
+const DEFAULT_SHOP=()=>["Cera","Desodorante","Cremas","Navajas"].map((n,i)=>({id:"s"+i,name:n,done:false}));
 let key=null, salt=null, pinLen=null, writing=Promise.resolve();
 const enc=new TextEncoder(), dec=new TextDecoder();
 function b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)}
@@ -435,6 +465,7 @@ function render(){
     el.append(w,a,d);fl.append(el);
   });
   renderCards();
+  renderShop();
 }
 
 /* ---------- tarjetas ---------- */
@@ -574,6 +605,41 @@ function formatMoneyInput(el){
 $("ccAmt").addEventListener("input",()=>{formatMoneyInput($("ccAmt"));const n=$("ccAmt").value.length;$("ccAmt").setSelectionRange(n,n)});
 $("ccAmt").addEventListener("blur",()=>{const v=parseMoney($("ccAmt").value);if(v>0)$("ccAmt").value="$"+v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})});
 
+/* ---------- súper ---------- */
+function renderShop(){
+  if(!Array.isArray(state.shop))state.shop=DEFAULT_SHOP();
+  const list=$("shopList");list.innerHTML="";
+  const pending=state.shop.filter(x=>!x.done), done=state.shop.filter(x=>x.done);
+  $("shopProg").textContent=state.shop.length
+    ? (pending.length?`Llevas ${done.length} de ${state.shop.length} en el carrito.`:"¡Ya tienes todo! 🛒")
+    : "Tu lista está vacía. Agrega lo que sueles comprar.";
+  const row=it=>{
+    const li=document.createElement("li");if(it.done)li.className="done";
+    const t=document.createElement("button");t.className="tick";t.setAttribute("aria-pressed",it.done);
+    const bx=document.createElement("span");bx.className="box";bx.textContent=it.done?"✓":"";
+    const nm=document.createElement("span");nm.className="name";nm.textContent=it.name;
+    t.append(bx,nm);
+    t.onclick=()=>{it.done=!it.done;persist();renderShop()};
+    const del=document.createElement("button");del.className="del";del.textContent="×";del.setAttribute("aria-label","Quitar "+it.name+" de la lista");
+    del.onclick=()=>{if(!confirm(`¿Quitar "${it.name}" de tu lista?`))return;state.shop=state.shop.filter(x=>x.id!==it.id);persist();renderShop()};
+    li.append(t,del);return li;
+  };
+  pending.forEach(it=>list.append(row(it)));
+  if(done.length&&pending.length){const sep=document.createElement("li");sep.className="shop-sep";sep.textContent="En el carrito";list.append(sep)}
+  done.forEach(it=>list.append(row(it)));
+  $("shopReset").hidden=!done.length;
+}
+$("shopAdd").onclick=()=>{
+  const n=$("shopNew").value.trim();
+  if(!n){$("shopErr").textContent="Escribe qué quieres agregar.";$("shopNew").focus();return}
+  if(state.shop.some(x=>x.name.toLowerCase()===n.toLowerCase())){$("shopErr").textContent="Eso ya está en tu lista.";return}
+  state.shop.push({id:uid(),name:n,done:false});
+  $("shopNew").value="";$("shopErr").textContent="";$("shopNew").focus();
+  persist();renderShop();
+};
+$("shopNew").addEventListener("keydown",e=>{if(e.key==="Enter")$("shopAdd").click()});
+$("shopReset").onclick=()=>{state.shop.forEach(x=>x.done=false);persist();renderShop()};
+
 /* ---------- actions ---------- */
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 $("save").onclick=()=>{
@@ -623,7 +689,7 @@ function showLock(){
 function lock(){
   if(!key)return;
   key=null;salt=null;state=DEFAULT_STATE();
-  ["amt","note","inc","sav","curPin","newPin","newPin2","ccConcept","ccAmt"].forEach(id=>$(id).value="");
+  ["amt","note","inc","sav","curPin","newPin","newPin2","ccConcept","ccAmt","shopNew"].forEach(id=>$(id).value="");
   render();mode="unlock";$("lockErr").textContent="";showLock();
 }
 function unlocked(){
