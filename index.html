@@ -133,7 +133,9 @@ ul.list .amt.pay{color:var(--green)}
 .shop-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 10px;margin:6px 0 4px}
 .shop-top h2{margin:0;white-space:nowrap;font-size:21px}
 .shop-top .btn{white-space:nowrap;padding:7px 12px;font-size:14px}
-nav button{font-size:14px}
+nav button{font-size:11px;padding:8px 0 9px!important;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+nav button img{width:24px;height:24px;border-radius:6px;opacity:.6}
+nav button[aria-current="page"] img{opacity:1}
 .progress{color:var(--muted);margin:0 0 14px}
 ul.shop{list-style:none;margin:0;padding:0}
 ul.shop li{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
@@ -177,6 +179,10 @@ body.home .topbar{display:none}
 .credit b{color:var(--ink);font-weight:600}
 .lock .credit{position:absolute;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom,0px));margin:0;color:#6E776E}
 .lock .credit b{color:var(--gold)}
+
+/* Fijos */
+.fx-in{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:11px 12px}
+.fx-pct{display:inline-block;font-size:12px;font-weight:700;background:var(--gold-soft);border-radius:999px;padding:1px 8px;margin-left:6px;color:var(--ink)}
 
 /* Bloqueo */
 body.locked main, body.locked nav{display:none}
@@ -230,7 +236,8 @@ body.locked .lock{display:flex}
     <button class="tile" data-go="mes"><img src="icons/sec-mes.svg" alt=""><b>Mes</b><small id="tsMes">Tu resumen</small></button>
     <button class="tile" data-go="tarjetas"><img src="icons/sec-tarjetas.svg" alt=""><b>Tarjetas</b><small id="tsTarjetas">Banamex y BanCoppel</small></button>
     <button class="tile" data-go="super"><img src="icons/sec-hygiene.svg" alt=""><b>Hygiene</b><small id="tsSuper">Tu lista</small></button>
-    <button class="tile wide" data-go="ajustes"><img src="icons/sec-ajustes.svg" alt=""><div><b>Ajustes</b><br><small>Ingreso, PIN y respaldo</small></div></button>
+    <button class="tile" data-go="fijos"><img src="icons/sec-fijos.svg" alt=""><b>Fijos</b><small id="tsFijos">Lo que pagas sí o sí</small></button>
+    <button class="tile" data-go="ajustes"><img src="icons/sec-ajustes.svg" alt=""><b>Ajustes</b><small>Ingreso, PIN y respaldo</small></button>
   </div>
 </section>
 
@@ -269,6 +276,37 @@ body.locked .lock{display:flex}
   <div id="bars"></div>
   <h2>Todos los gastos del mes</h2>
   <ul class="list" id="monthList"></ul>
+</section>
+
+<section id="fijos" hidden>
+  <div class="hero">
+    <p>Tus gastos fijos al mes</p>
+    <div class="big num" id="fxMonth">$0</div>
+    <div class="meter" aria-hidden="true"><span id="fxMeter" style="width:0"></span></div>
+    <small id="fxSub">Agrega lo que pagas sí o sí para ver cuánto se lleva de tu ingreso.</small>
+  </div>
+  <div class="sum" style="margin-top:12px">
+    <div><small>Por semana</small><b id="fxWeek">$0</b></div>
+    <div><small>Cuántos tienes</small><b id="fxCount">0</b></div>
+  </div>
+
+  <div class="add">
+    <label for="fName">Nuevo gasto fijo</label>
+    <p class="hint" style="margin:-2px 0 10px">Renta, teléfono, internet, transporte, suscripciones…</p>
+    <input id="fName" class="fx-in" type="text" placeholder="¿Qué es? Ej. Teléfono" maxlength="40">
+    <div class="seg" role="group" aria-label="Cada cuándo se paga" style="margin-top:8px">
+      <button id="fqSem" aria-pressed="false">Cada semana</button>
+      <button id="fqMes" aria-pressed="true">Cada mes</button>
+    </div>
+    <div class="row">
+      <input id="fAmt" type="text" inputmode="decimal" autocomplete="off" placeholder="$0.00" aria-label="Monto">
+      <button class="btn" id="fAdd">Agregar</button>
+    </div>
+    <p class="err" id="fErr" role="status"></p>
+  </div>
+
+  <h2>Tu lista de fijos</h2>
+  <ul class="list" id="fixedList"></ul>
 </section>
 
 <section id="tarjetas" hidden>
@@ -332,17 +370,6 @@ body.locked .lock{display:flex}
     <p class="hint">Págate primero: este monto ya no cuenta como disponible.</p>
   </div>
 
-  <h2>Gastos fijos</h2>
-  <p class="hint" style="margin-top:-4px">Lo que pagas sí o sí: renta, teléfono, transporte, suscripciones.</p>
-  <ul class="list" id="fixedList"></ul>
-  <div class="fixed-add">
-    <input id="fName" type="text" placeholder="Nombre" maxlength="40">
-    <input id="fAmt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="$">
-    <select id="fFreq"><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option></select>
-    <button class="btn" id="fAdd">Agregar</button>
-  </div>
-  <p class="err" id="fErr" role="status"></p>
-
   <h2>Seguridad</h2>
   <div class="field">
     <label for="autoLock">Bloquear sola después de</label>
@@ -376,11 +403,12 @@ body.locked .lock{display:flex}
 </main>
 
 <nav><div class="in">
-  <button data-tab="semana">Semana</button>
-  <button data-tab="mes">Mes</button>
-  <button data-tab="tarjetas">Tarjetas</button>
-  <button data-tab="super">Hygiene</button>
-  <button data-tab="ajustes">Ajustes</button>
+  <button data-tab="semana"><img src="icons/sec-semana.svg" alt="">Semana</button>
+  <button data-tab="mes"><img src="icons/sec-mes.svg" alt="">Mes</button>
+  <button data-tab="fijos"><img src="icons/sec-fijos.svg" alt="">Fijos</button>
+  <button data-tab="tarjetas"><img src="icons/sec-tarjetas.svg" alt="">Tarjetas</button>
+  <button data-tab="super"><img src="icons/sec-hygiene.svg" alt="">Hygiene</button>
+  <button data-tab="ajustes"><img src="icons/sec-ajustes.svg" alt="">Ajustes</button>
 </div></nav>
 
 <script>
@@ -509,15 +537,26 @@ function render(){
   if(document.activeElement!==$("sav"))$("sav").value=state.savingPct??"";
   const fl=$("fixedList");fl.innerHTML="";
   if(!state.fixed.length)fl.innerHTML='<li class="empty">Aún no agregas gastos fijos.</li>';
-  state.fixed.forEach(f=>{
+  const fxMonthTotal=weeklyFixed()*WEEKS_PER_MONTH, incMonth=state.income*WEEKS_PER_MONTH;
+  $("fxMonth").textContent=money(fxMonthTotal);
+  $("fxWeek").textContent=money(weeklyFixed());
+  $("fxCount").textContent=state.fixed.length;
+  const pct=incMonth>0?Math.round(fxMonthTotal/incMonth*100):null;
+  $("fxMeter").style.width=(pct===null?0:Math.min(100,pct))+"%";
+  $("fxSub").textContent=!state.fixed.length?"Agrega lo que pagas sí o sí para ver cuánto se lleva de tu ingreso."
+    :pct===null?"Captura tu ingreso en Ajustes para ver qué parte se llevan tus fijos."
+    :`Se llevan el ${pct}% de tu ingreso`+(pct>50?". Es mucho: revisa si puedes recortar alguno.":".");
+  $("fqSem").setAttribute("aria-pressed",fxFreq==="semanal");$("fqMes").setAttribute("aria-pressed",fxFreq==="mensual");
+  [...state.fixed].sort((a,b)=>(b.freq==="mensual"?b.amount:b.amount*WEEKS_PER_MONTH)-(a.freq==="mensual"?a.amount:a.amount*WEEKS_PER_MONTH)).forEach(f=>{
     const el=document.createElement("li");
     const w=document.createElement("div");w.className="what";
     const b=document.createElement("b");b.textContent=f.name;
-    const s=document.createElement("small");s.textContent=f.freq==="mensual"?`Cada mes (≈ ${money(f.amount/WEEKS_PER_MONTH)} por semana)`:"Cada semana";
+    const s=document.createElement("small");s.textContent=f.freq==="mensual"?`Cada mes · ≈ ${money(f.amount/WEEKS_PER_MONTH)} por semana`:`Cada semana · ≈ ${money(f.amount*WEEKS_PER_MONTH)} al mes`;
+    if(incMonth>0){const pc=document.createElement("span");pc.className="fx-pct";pc.textContent=Math.round((f.freq==="mensual"?f.amount:f.amount*WEEKS_PER_MONTH)/incMonth*100)+"%";b.append(pc)}
     w.append(b,s);
     const a=document.createElement("span");a.className="amt";a.textContent=money(f.amount);
     const d=document.createElement("button");d.className="del";d.textContent="×";d.setAttribute("aria-label","Quitar "+f.name);
-    d.onclick=()=>{state.fixed=state.fixed.filter(x=>x.id!==f.id);persist();render()};
+    d.onclick=()=>{if(!confirm(`¿Quitar "${f.name}" de tus gastos fijos?`))return;state.fixed=state.fixed.filter(x=>x.id!==f.id);persist();render()};
     el.append(w,a,d);fl.append(el);
   });
   renderCards();
@@ -712,13 +751,19 @@ $("inc").addEventListener("change",()=>{state.income=Math.max(0,parseFloat($("in
 $("sav").addEventListener("change",()=>{state.savingPct=Math.min(90,Math.max(0,parseFloat($("sav").value)||0));persist();render()});
 $("payday").addEventListener("change",()=>{state.payday=Number($("payday").value);persist();render()});
 $("fAdd").onclick=()=>{
-  const n=$("fName").value.trim(),v=parseFloat($("fAmt").value);
+  const n=$("fName").value.trim(),v=parseMoney($("fAmt").value);
   if(!n){$("fErr").textContent="Ponle un nombre al gasto fijo.";return}
   if(!(v>0)){$("fErr").textContent="Escribe un monto mayor a cero.";return}
-  state.fixed.push({id:uid(),name:n,amount:v,freq:$("fFreq").value});
+  state.fixed.push({id:uid(),name:n,amount:v,freq:fxFreq});
   $("fName").value="";$("fAmt").value="";$("fErr").textContent="";
   persist();render();
 };
+let fxFreq="mensual";
+$("fqSem").onclick=()=>{fxFreq="semanal";render()};
+$("fqMes").onclick=()=>{fxFreq="mensual";render()};
+$("fAmt").addEventListener("input",()=>{formatMoneyInput($("fAmt"));const n=$("fAmt").value.length;$("fAmt").setSelectionRange(n,n)});
+$("fAmt").addEventListener("keydown",e=>{if(e.key==="Enter")$("fAdd").click()});
+$("fName").addEventListener("keydown",e=>{if(e.key==="Enter")$("fAmt").focus()});
 function showTab(id){
   document.querySelectorAll("nav button").forEach(x=>{if(x.dataset.tab===id)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});
   document.querySelectorAll("main section").forEach(s=>s.hidden=s.id!==id);
@@ -779,6 +824,7 @@ function renderHome(){
     $("hsCardLbl").textContent="Tarjetas";$("hsCard").textContent="Al corriente ✓";$("hsCard").classList.remove("warn");
     $("tsTarjetas").textContent="Sin pagos pendientes";
   }
+  $("tsFijos").textContent=state.fixed.length?money(weeklyFixed()*WEEKS_PER_MONTH)+" al mes":"Lo que pagas sí o sí";
   const shop=Array.isArray(state.shop)?state.shop:[];
   const pend=shop.filter(x=>!x.done).length;
   $("tsSuper").textContent=shop.length?(pend?`${pend} por comprar`:"Todo comprado ✓"):"Tu lista";
@@ -803,7 +849,7 @@ function showLock(){
 function lock(){
   if(!key)return;
   key=null;salt=null;state=DEFAULT_STATE();
-  ["amt","note","inc","sav","curPin","newPin","newPin2","ccConcept","ccAmt","shopNew"].forEach(id=>$(id).value="");
+  ["amt","note","inc","sav","curPin","newPin","newPin2","ccConcept","ccAmt","shopNew","fName","fAmt"].forEach(id=>$(id).value="");
   render();mode="unlock";$("lockErr").textContent="";showLock();
 }
 function unlocked(){
