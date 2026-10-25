@@ -192,6 +192,31 @@ body.home .topbar{display:none}
 .bd-row.total b{color:var(--gold)}
 .bd-row.total:last-child b{font-size:16px}
 
+.sav-box{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.sav-box div{background:var(--black);color:var(--on-black-muted);border-radius:12px;padding:10px}
+.sav-box small{display:block;font-size:12px;white-space:nowrap}
+.sav-box b{display:block;color:var(--gold);font-family:"Chakra Petch",Figtree,system-ui,sans-serif;font-size:17px;white-space:nowrap}
+
+/* Barra superior, aviso y salida */
+.appbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 16px}
+.appbar .topbar{margin:0}
+body.home .appbar{justify-content:flex-end;margin-bottom:12px}
+.logout{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--sheet);border-radius:999px;padding:7px 13px;cursor:pointer;font-weight:600;font-size:14px;color:var(--ink)}
+.logout:hover{border-color:var(--black)}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translate(-50%,12px);background:var(--black);color:var(--gold);border:1px solid var(--gold);padding:9px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:30;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.bad{color:#FF4D5E;border-color:#FF4D5E}
+.bye{position:fixed;inset:0;background:var(--black);color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;z-index:40;text-align:center}
+.bye[hidden]{display:none}
+.bye-in{max-width:320px;animation:byeIn .35s ease-out}
+.bye-check{width:84px;height:84px;margin:0 auto 18px;border-radius:50%;background:var(--gold);color:var(--black);display:grid;place-items:center;font-size:44px;font-weight:800;box-shadow:var(--glow)}
+.bye.bad .bye-check{background:#FF4D5E;box-shadow:none}
+.bye h2{margin:0 0 8px;font-size:28px;font-family:"Chakra Petch",Figtree,system-ui,sans-serif}
+.bye p{margin:0 0 6px;color:var(--on-black-muted)}
+.bye .bye-name{margin-top:16px;color:var(--gold);font-weight:700}
+@keyframes byeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.bye-in{animation:none}}
+
 /* Bloqueo */
 body.locked main, body.locked nav{display:none}
 .lock{position:fixed;inset:0;background:var(--black);color:var(--on-black);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));z-index:20}
@@ -228,7 +253,10 @@ body.locked .lock{display:flex}
   <p class="credit">Desarrollado por <b>Joshua Aimar</b></p>
 </div>
 <main class="wrap">
-<button class="topbar" id="homeBtn" aria-label="Ir al inicio"><img src="icons/icon-192.png" alt="">Money Club <small>· Inicio</small></button>
+<div class="appbar">
+  <button class="topbar" id="homeBtn" aria-label="Ir al inicio"><img src="icons/icon-192.png" alt="">Money Club <small>· Inicio</small></button>
+  <button class="logout" id="logoutBtn" aria-label="Cerrar la app"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M7 6.3a8 8 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>Salir</button>
+</div>
 
 <section id="inicio">
   <div class="welcome">
@@ -377,6 +405,11 @@ body.locked .lock{display:flex}
     <label for="sav">Ahorro que apartas al cobrar (%)</label>
     <input id="sav" type="number" inputmode="numeric" min="0" max="90" step="1" placeholder="10">
     <p class="hint">Págate primero: este monto ya no cuenta como disponible.</p>
+    <div class="sav-box" id="savBox" hidden>
+      <div><small>Por semana</small><b id="savWeek">$0</b></div>
+      <div><small>Por mes</small><b id="savMonth">$0</b></div>
+      <div><small>Por año</small><b id="savYear">$0</b></div>
+    </div>
   </div>
 
   <h2>Seguridad</h2>
@@ -411,6 +444,15 @@ body.locked .lock{display:flex}
 </section>
 </main>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="bye" id="bye" hidden>
+  <div class="bye-in">
+    <div class="bye-check" aria-hidden="true">✓</div>
+    <h2 id="byeTitle">Todo guardado</h2>
+    <p id="byeText">Tus gastos, tarjetas, fijos y listas quedaron guardados y cifrados.</p>
+    <p class="bye-name" id="byeName">Hasta pronto, Joshua 👋</p>
+  </div>
+</div>
 <nav><div class="in">
   <button data-tab="semana"><img src="icons/sec-semana.svg" alt="">Semana</button>
   <button data-tab="mes"><img src="icons/sec-mes.svg" alt="">Mes</button>
@@ -453,7 +495,8 @@ async function unseal(v,k){
   return JSON.parse(dec.decode(pt));
 }
 function readVault(){try{const v=localStorage.getItem(VAULT);return v?JSON.parse(v):null}catch(e){return null}}
-function persist(){
+let saveOk=true;
+function persist(quiet){
   if(!key)return;
   const snap=JSON.parse(JSON.stringify(state)), k=key, sl=salt, pl=pinLen;
   writing=writing.then(async()=>{
@@ -461,10 +504,17 @@ function persist(){
     if(pl)v.len=pl;
     localStorage.setItem(VAULT,JSON.stringify(v));
     $("status").textContent="Guardado y cifrado en este dispositivo.";
-  }).catch(()=>{$("status").textContent="No se pudo guardar. Revisa que el navegador permita almacenamiento."});
+    saveOk=true;
+    if(!quiet)toast("✓ Guardado");
+  }).catch(()=>{saveOk=false;$("status").textContent="No se pudo guardar. Revisa que el navegador permita almacenamiento.";toast("⚠️ No se pudo guardar",true)});
   return writing;
 }
 if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().catch(()=>{})}
+let toastTimer=null;
+function toast(msg,bad){
+  const t=$("toast");t.textContent=msg;t.classList.toggle("bad",!!bad);t.classList.add("show");
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),1600);
+}
 
 /* ---------- dates ---------- */
 function weekStart(d=new Date()){
@@ -558,6 +608,7 @@ function render(){
   $("payday").value=String(state.payday);
   $("autoLock").value=String(state.autoLock||5);
   if(document.activeElement!==$("sav"))$("sav").value=state.savingPct??"";
+  showSavings(document.activeElement===$("sav")?parseFloat($("sav").value):Number(state.savingPct));
   const fl=$("fixedList");fl.innerHTML="";
   if(!state.fixed.length)fl.innerHTML='<li class="empty">Aún no agregas gastos fijos.</li>';
   const fxMonthTotal=weeklyFixed()*WEEKS_PER_MONTH, incMonth=state.income*WEEKS_PER_MONTH;
@@ -703,7 +754,7 @@ $("ccSave").onclick=()=>{
   if(!(v>0)){$("ccErr").textContent="Escribe un monto mayor a cero.";$("ccAmt").focus();return}
   state.cardMoves.push({id:uid(),card:ccSel,type:ccType,concept:$("ccConcept").value.trim(),date:d,amount:v});
   $("ccConcept").value="";$("ccAmt").value="";$("ccDate").value=iso(today0());
-  $("ccErr").textContent="Movimiento guardado.";
+  $("ccErr").textContent="";
   setTimeout(()=>{if($("ccErr").textContent==="Movimiento guardado.")$("ccErr").textContent=""},1800);
   persist();render();
 };
@@ -764,13 +815,21 @@ $("save").onclick=()=>{
   const v=parseFloat($("amt").value);
   if(!(v>0)){$("err").textContent="Escribe un monto mayor a cero.";$("amt").focus();return}
   state.expenses.push({id:uid(),t:Date.now(),amount:v,cat,note:$("note").value.trim()});
-  $("amt").value="";$("note").value="";$("err").textContent="Gasto guardado.";
+  $("amt").value="";$("note").value="";$("err").textContent="";
   setTimeout(()=>{if($("err").textContent==="Gasto guardado.")$("err").textContent=""},1800);
   persist();render();
 };
 $("amt").addEventListener("keydown",e=>{if(e.key==="Enter")$("save").click()});
 $("note").addEventListener("keydown",e=>{if(e.key==="Enter")$("save").click()});
 $("inc").addEventListener("change",()=>{state.income=Math.max(0,parseFloat($("inc").value)||0);persist();render()});
+function showSavings(pct){
+  const box=$("savBox");
+  if(!(state.income>0)){box.hidden=true;return}
+  const w=state.income*(Math.min(90,Math.max(0,pct||0)))/100;
+  box.hidden=false;
+  $("savWeek").textContent=money(w);$("savMonth").textContent=money(w*WEEKS_PER_MONTH);$("savYear").textContent=money(w*52);
+}
+$("sav").addEventListener("input",()=>showSavings(parseFloat($("sav").value)));
 $("sav").addEventListener("change",()=>{state.savingPct=Math.min(90,Math.max(0,parseFloat($("sav").value)||0));persist();render()});
 $("payday").addEventListener("change",()=>{state.payday=Number($("payday").value);persist();render()});
 $("fAdd").onclick=()=>{
@@ -797,6 +856,20 @@ function showTab(id){
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 $("homeBtn").onclick=()=>showTab("inicio");
+$("logoutBtn").onclick=async()=>{
+  // si estaba escribiendo un gasto sin guardar, avisar
+  const pendingText=["amt","ccAmt","fAmt"].some(id=>$(id).value.trim());
+  if(pendingText&&!confirm("Tienes un monto escrito sin guardar. ¿Salir de todos modos?"))return;
+  await writing;
+  const bye=$("bye");
+  bye.classList.toggle("bad",!saveOk);
+  $("byeTitle").textContent=saveOk?"Todo guardado":"Algo no se guardó";
+  $("byeText").textContent=saveOk?"Tus gastos, tarjetas, fijos y listas quedaron guardados y cifrados.":"Revisa que el navegador permita almacenamiento antes de cerrar.";
+  $("byeName").textContent="Hasta pronto, "+NAME.split(" ")[0]+" 👋";
+  $("toast").classList.remove("show");
+  bye.hidden=false;
+  setTimeout(()=>{lock();bye.hidden=true},2200);
+};
 
 /* ---------- inicio ---------- */
 const NAME="Joshua Aimar";
@@ -915,7 +988,7 @@ async function submitPin(){
       }
       writeFails({n:0,until:0});
       key=k;salt=s2;pinLen=pin.length;state=Object.assign(DEFAULT_STATE(),data);
-      if(v.len!==pinLen)persist();
+      if(v.len!==pinLen)persist(true);
       unlocked();
     }
   }catch(e){$("lockErr").textContent="No se pudo abrir. Asegúrate de usar la app desde su enlace https."}
