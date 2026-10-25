@@ -184,6 +184,14 @@ body.home .topbar{display:none}
 .fx-in{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:11px 12px}
 .fx-pct{display:inline-block;font-size:12px;font-weight:700;background:var(--gold-soft);border-radius:999px;padding:1px 8px;margin-left:6px;color:var(--ink)}
 
+/* Desglose semanal */
+.breakdown{margin-top:14px;border-top:1px solid #262A26;padding-top:10px;font-size:14px;color:var(--on-black-muted)}
+.bd-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+.bd-row b{color:#fff;font-weight:600;white-space:nowrap}
+.bd-row.total{border-top:1px dashed #343A34;margin-top:4px;padding-top:7px;color:#fff;font-weight:600}
+.bd-row.total b{color:var(--gold)}
+.bd-row.total:last-child b{font-size:16px}
+
 /* Bloqueo */
 body.locked main, body.locked nav{display:none}
 .lock{position:fixed;inset:0;background:var(--black);color:var(--on-black);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top,0px));z-index:20}
@@ -247,6 +255,7 @@ body.locked .lock{display:flex}
     <div class="big num" id="left">$0</div>
     <div class="meter" aria-hidden="true"><span id="meter" style="width:0"></span></div>
     <small id="heroSub">Captura tu ingreso semanal en Ajustes para empezar.</small>
+    <div class="breakdown" id="breakdown" hidden></div>
   </div>
 
   <div class="add">
@@ -500,8 +509,22 @@ function render(){
   if(left<0)$("left").textContent=money(-left);
   $("meter").style.width=(budget>0?Math.min(100,spent/budget*100):0)+"%";
   $("heroSub").textContent=state.income>0
-    ? `Gastaste ${money(spent)} de ${money(Math.max(budget,0))} disponibles para gastos variables.`
+    ? `Gastaste ${money(spent)} de ${money(Math.max(budget,0))} disponibles, ya descontando tu ahorro y tus gastos fijos.`
     : "Captura tu ingreso semanal en Ajustes para empezar.";
+  const bd=$("breakdown");bd.hidden=!(state.income>0);bd.innerHTML="";
+  if(state.income>0){
+    [["Ingreso semanal",state.income,""],
+     [`Ahorro (${Number(state.savingPct)||0}%)`,weeklySaving(),"−"],
+     [`Gastos fijos (${state.fixed.length})`,weeklyFixed(),"−"],
+     ["Disponible para gastar",budget,"="],
+     ["Ya gastaste",spent,"−"],
+     [left<0?"Te pasaste por":"Te queda",Math.abs(left),"="]].forEach(([l,v,sg],i)=>{
+      const r=document.createElement("div");r.className="bd-row"+(sg==="="?" total":"");
+      const a=document.createElement("span");a.textContent=l;
+      const b=document.createElement("b");b.textContent=(sg&&sg!=="="?sg+" ":"")+money(v);
+      r.append(a,b);bd.append(r);
+    });
+  }
   const wl=$("weekList");wl.innerHTML="";
   if(!week.length){wl.innerHTML='<li class="empty">Aún no registras gastos esta semana.</li>'}
   week.forEach(e=>wl.append(li(e)));
