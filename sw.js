@@ -1,5 +1,5 @@
 // Cambia la versión cada vez que actualices los archivos para que el celular descargue lo nuevo.
-const VERSION = "mis-gastos-v26";
+const VERSION = "mis-gastos-v27";
 const CORE = ["./", "./index.html", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png",
   "./icons/banamex.png", "./icons/bancoppel.png",
@@ -22,7 +22,7 @@ self.addEventListener("fetch", e => {
 
   // Página: intenta red primero (para recibir actualizaciones) y usa caché sin internet.
   if (req.mode === "navigate") {
-    e.respondWith(fetch(req).then(r => {
+    e.respondWith(fetch(req, { cache: "no-store" }).then(r => {
       const copy = r.clone(); caches.open(VERSION).then(c => c.put("./index.html", copy)); return r;
     }).catch(() => caches.match("./index.html")));
     return;
