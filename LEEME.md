@@ -22,7 +22,7 @@
 - Subir una versión nueva NO borra tus datos: viven en el navegador del celular, en la llave `mis-gastos-vault`. Nunca cambies ese nombre en el código.
 - Cada vez que abres la app se guarda una copia automática (`mis-gastos-vault-prev`). Si el guardado principal se daña, la app usa esa copia.
 - Si cambias la forma de los datos, sube `SCHEMA` en index.html y agrega el paso en `migrate()`. Antes de migrar se guarda una copia con la versión anterior (`mis-gastos-vault-v1`, etc.).
-- Aun así, descarga un respaldo de vez en cuando (Ajustes > Respaldo). La app te lo recuerda si pasan más de 30 días.
+- Aun así, manda un respaldo de vez en cuando: Ajustes > "Enviar respaldo (WhatsApp)" abre el menú de compartir con el .txt adjunto; elige WhatsApp y tu chat "Tú".
 
 ## Tarjetas e historial
 - Cada pago se aplica al estado de cuenta pendiente más antiguo de esa tarjeta.
