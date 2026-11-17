@@ -190,6 +190,9 @@ body.home .topbar{display:none}
 
 /* Fijos */
 .fx-in{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:11px 12px}
+.fx-sub{display:block;margin-top:4px;font-size:15px;color:var(--ink)!important;line-height:1.35}
+.fx-sub .fq{font-weight:700}
+.fx-sub .fx-eq{font-family:"Chakra Petch",sans-serif;font-weight:700;font-size:16px}
 .fx-pct{display:inline-block;font-size:12px;font-weight:700;background:var(--gold-soft);border-radius:999px;padding:1px 8px;margin-left:6px;color:var(--ink)}
 
 /* Desglose semanal */
@@ -443,11 +446,11 @@ body.locked .lock{display:flex}
   <p class="err" id="sErr" role="status"></p>
 
   <h2>Respaldo</h2>
-  <p class="hint" style="margin-top:-4px">Tus datos viven solo en este celular y están cifrados con tu PIN. El respaldo también va cifrado: para restaurarlo necesitas el PIN que tenías al descargarlo.</p>
+  <p class="hint" style="margin-top:-4px">Tus datos viven solo en este celular y están cifrados con tu PIN. El respaldo se descarga como estado de cuenta (.txt) que puedes leer; guárdalo en un lugar privado. Para restaurarlo necesitas el PIN que tenías al descargarlo.</p>
   <div class="row" style="margin-top:10px">
     <button class="btn ghost" id="exp" style="flex:1">Descargar respaldo</button>
     <button class="btn ghost" id="impBtn" style="flex:1">Restaurar respaldo</button>
-    <input type="file" id="imp" accept="application/json,.json" hidden>
+    <input type="file" id="imp" accept=".txt,.json,text/plain,application/json" hidden>
   </div>
   <p class="hint" id="lastBk"></p>
   <p class="err" id="bErr" role="status"></p>
@@ -664,7 +667,10 @@ function render(){
     const el=document.createElement("li");
     const w=document.createElement("div");w.className="what";
     const b=document.createElement("b");b.textContent=f.name;
-    const s=document.createElement("small");s.textContent=f.freq==="mensual"?`Cada mes · ≈ ${money(f.amount/WEEKS_PER_MONTH)} por semana`:`Cada semana · ≈ ${money(f.amount*WEEKS_PER_MONTH)} al mes`;
+    const s=document.createElement("small");s.className="fx-sub";
+    const fq=document.createElement("span");fq.className="fq";fq.textContent=f.freq==="mensual"?"Cada mes":"Cada semana";
+    const eq=document.createElement("span");eq.className="fx-eq";eq.textContent="≈ "+money(f.freq==="mensual"?f.amount/WEEKS_PER_MONTH:f.amount*WEEKS_PER_MONTH);
+    s.append(fq," · ",eq,f.freq==="mensual"?" por semana":" al mes");
     if(incMonth>0){const pc=document.createElement("span");pc.className="fx-pct";pc.textContent=Math.round((f.freq==="mensual"?f.amount:f.amount*WEEKS_PER_MONTH)/incMonth*100)+"%";b.append(pc)}
     w.append(b,s);
     const a=document.createElement("span");a.className="amt";a.textContent=money(f.amount);
@@ -1168,23 +1174,98 @@ $("chgPin").onclick=async()=>{
 };
 
 /* ---------- respaldo ---------- */
+const BK_START="-----INICIO DATOS CIFRADOS MONEY CLUB-----", BK_END="-----FIN DATOS CIFRADOS MONEY CLUB-----";
+function buildStatement(vaultStr){
+  const W=72, L=[], line=c=>"".padEnd(W,c);
+  const num=n=>money(n).replace("MX","");
+  const cut=(t,n)=>{t=String(t);return t.length>n?t.slice(0,n-1)+"…":t};
+  const row=(a,b,c,d)=>cut(a,10).padEnd(11)+cut(b,30).padEnd(31)+cut(c,14).padEnd(15)+String(d).padStart(W-57);
+  const lr=(a,b)=>String(a).padEnd(W-String(b).length)+b;
+  const center=t=>"".padEnd(Math.max(0,Math.floor((W-t.length)/2)))+t;
+  const dfmt=d=>`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+  const up=t=>t.toUpperCase();
+  const now=new Date();
+  L.push(line("="),center("MONEY CLUB"),center("ESTADO DE CUENTA PERSONAL"),line("="));
+  L.push(lr("Titular: "+NAME,"Emisión: "+dfmt(now)));
+  const ts=state.expenses.map(e=>e.t);
+  if(ts.length)L.push(lr("Periodo:",dfmt(new Date(Math.min(...ts)))+" al "+dfmt(now)));
+  L.push("");
+  // resumen
+  L.push(line("-"),"RESUMEN",line("-"));
+  const monthNow=state.expenses.filter(e=>inThisMonth(e.t)).reduce((a,e)=>a+e.amount,0);
+  L.push(lr("Ingreso semanal",num(state.income)));
+  L.push(lr(`Ahorro semanal (${Number(state.savingPct)||0}%)`,num(weeklySaving())));
+  L.push(lr("Gastos fijos al mes (aprox.)",num(weeklyFixed()*WEEKS_PER_MONTH)));
+  L.push(lr("Gastos variables de "+monthFmt.format(now),num(monthNow)));
+  L.push(lr("Total de gastos registrados",num(state.expenses.reduce((a,e)=>a+e.amount,0))));
+  L.push("");
+  // fijos
+  L.push(line("-"),"GASTOS FIJOS",line("-"));
+  if(!state.fixed.length)L.push("Sin gastos fijos registrados.");
+  state.fixed.forEach(f=>L.push(lr(`${cut(f.name,34).padEnd(35)}${f.freq==="mensual"?"Mensual":"Semanal"}`,num(f.amount))));
+  L.push("");
+  // gastos por mes
+  L.push(line("-"),"DETALLE DE GASTOS POR MES",line("-"));
+  const g={};state.expenses.forEach(e=>{const d=new Date(e.t),k=d.getFullYear()*12+d.getMonth();(g[k]=g[k]||[]).push(e)});
+  const keys=Object.keys(g).map(Number).sort((a,b)=>b-a);
+  if(!keys.length)L.push("Sin gastos registrados.");
+  keys.forEach(k=>{
+    const list=g[k].sort((a,b)=>a.t-b.t), tot=list.reduce((a,e)=>a+e.amount,0);
+    L.push("",up(monthFmt.format(new Date(Math.floor(k/12),k%12,1))),row("FECHA","CONCEPTO","CATEGORÍA","CARGO"),line("·"));
+    list.forEach(e=>L.push(row(dfmt(new Date(e.t)),e.note||e.cat,e.cat,num(e.amount))));
+    L.push(line("·"));
+    const by={};list.forEach(e=>by[e.cat]=(by[e.cat]||0)+e.amount);
+    Object.entries(by).sort((a,b)=>b[1]-a[1]).forEach(([c,v])=>L.push(lr("  "+c+` (${Math.round(v/tot*100)}%)`,num(v))));
+    L.push(lr(`TOTAL DEL MES (${list.length} movimiento${list.length===1?"":"s"})`,num(tot)));
+  });
+  L.push("");
+  // tarjetas
+  CARDS.forEach(card=>{
+    const all=(state.cardMoves||[]).filter(m=>m.card===card.id);
+    const c=cfg(card.id);
+    L.push(line("-"),"TARJETA "+up(card.name)+`   (corte día ${c.cut} · pago día ${c.pay})`,line("-"));
+    if(!all.length){L.push("Sin movimientos.","");return}
+    const pend=statements(all.filter(m=>!m.arch)), paid=statements(all.filter(m=>m.arch)).reverse();
+    const block=(s,tag)=>{
+      L.push("",`FECHA LÍMITE DE PAGO: ${dfmt(parseIso(s.due))}   ${tag}`,row("FECHA","CONCEPTO","TIPO","IMPORTE"),line("·"));
+      s.moves.sort((a,b)=>a.date.localeCompare(b.date)).forEach(m=>L.push(row(dfmt(parseIso(m.date)),m.concept||(m.type==="pago"?"Pago a la tarjeta":"Compra"),m.type==="pago"?"Abono":"Cargo",(m.type==="pago"?"-":"")+num(m.amount))));
+      L.push(line("·"),lr("Cargos",num(s.charges)),lr("Abonos",(s.paid?"-":"")+num(s.paid)),lr("SALDO",num(Math.max(0,s.net))));
+    };
+    if(pend.length){L.push("PENDIENTE DE PAGO");pend.forEach(s=>block(s,s.net>0?"[PENDIENTE]":"[CUBIERTO]"))}
+    else L.push("Al corriente: sin saldo pendiente.");
+    if(paid.length){L.push("","HISTORIAL PAGADO");paid.forEach(s=>block(s,"[PAGADO]"))}
+    L.push("");
+  });
+  // lista
+  if(Array.isArray(state.shop)&&state.shop.length){
+    L.push(line("-"),"LISTA PERSONAL HYGIENE",line("-"));
+    state.shop.forEach(x=>L.push((x.done?"[x] ":"[ ] ")+x.name));L.push("");
+  }
+  L.push(line("="),"Para restaurar: Money Club > Ajustes > Restaurar respaldo, y elige este",
+    "archivo. Necesitas el PIN que tenías al descargarlo. No edites el bloque",
+    "de abajo o el respaldo ya no se podrá restaurar.",line("="),"",BK_START,vaultStr,BK_END,"");
+  return "\ufeff"+L.join("\r\n");
+}
 $("exp").onclick=async()=>{
   await writing;
   if(!localStorage.getItem(VAULT)){$("bErr").textContent="Aún no hay datos para respaldar.";return}
   state.lastBackup=Date.now();await persist(true);render();
   const v=localStorage.getItem(VAULT);
-  const blob=new Blob([v],{type:"application/json"});
+  const blob=new Blob([buildStatement(v)],{type:"text/plain;charset=utf-8"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
-  a.download="money-club-"+new Date().toISOString().slice(0,10)+".json";
+  a.download="money-club-estado-de-cuenta-"+iso(new Date())+".txt";
   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  $("bErr").textContent="Respaldo cifrado descargado.";
+  $("bErr").textContent="Estado de cuenta descargado (.txt). Sirve también para restaurar.";
 };
 $("impBtn").onclick=()=>$("imp").click();
 $("imp").onchange=async()=>{
   const f=$("imp").files[0];if(!f)return;
   $("bErr").textContent="";
   try{
-    let d=JSON.parse(await f.text());
+    let txt=(await f.text()).replace(/^\ufeff/,"");
+    const i=txt.indexOf(BK_START), j=txt.indexOf(BK_END);
+    if(i!==-1&&j>i)txt=txt.slice(i+BK_START.length,j);
+    let d=JSON.parse(txt.trim());
     if(d&&d.ct){
       const p=prompt("Escribe el PIN que tenías cuando descargaste este respaldo:");
       if(p===null){$("imp").value="";return}
