@@ -247,6 +247,7 @@ body.locked .lock{display:flex}
 .lock :focus-visible{outline-color:var(--gold)}
 .sec-grid{display:grid;gap:8px;margin-top:10px}
 .sec-grid input{border:1px solid var(--line);background:var(--sheet);border-radius:12px;padding:11px 12px;min-width:0;width:100%}
+.lock-in p.lock-hi{margin:0 0 6px;color:var(--gold);font-size:20px;font-weight:700;text-shadow:var(--glow)}
 </style>
 </head>
 <body class="locked home">
@@ -254,6 +255,7 @@ body.locked .lock{display:flex}
   <div class="lock-in">
     <img src="icons/icon-192.png" alt="">
     <h1>Money Club</h1>
+    <p class="lock-hi" id="lockHi"></p>
     <p id="lockMsg">Cargando…</p>
     <input class="pin" id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="PIN">
     <input class="pin" id="pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="Confirma tu PIN" placeholder="Confirma" hidden>
@@ -1055,6 +1057,8 @@ function writeFails(f){try{localStorage.setItem(FAILS,JSON.stringify(f))}catch(e
 function showLock(){
   document.body.classList.add("locked");
   const create=mode==="create";
+  const h=new Date().getHours(), nm=NAME.split(" ")[0];
+  $("lockHi").textContent=h>=5&&h<12?`Buenos días, ${nm} ☀️`:h>=12&&h<19?`Buenas tardes, ${nm} 🌤️`:`Buenas noches, ${nm} 🌙`;
   $("lockMsg").textContent=create?"Crea un PIN de 4 dígitos para proteger tus datos.":"Escribe tu PIN para entrar.";
   $("pin").placeholder=create?"PIN nuevo":"PIN";
   $("pin").maxLength=create?4:8;
