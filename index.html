@@ -447,6 +447,7 @@ body.locked .lock{display:flex}
 
   <h2>Respaldo</h2>
   <p class="hint" style="margin-top:-4px">Tus datos viven solo en este celular y están cifrados con tu PIN. El respaldo se descarga como estado de cuenta (.txt) que puedes leer; guárdalo en un lugar privado. Para restaurarlo necesitas el PIN que tenías al descargarlo.</p>
+  <button class="btn" id="shareBk" style="width:100%;margin-top:10px">Enviar respaldo (WhatsApp)</button>
   <div class="row" style="margin-top:10px">
     <button class="btn ghost" id="exp" style="flex:1">Descargar respaldo</button>
     <button class="btn ghost" id="impBtn" style="flex:1">Restaurar respaldo</button>
@@ -1116,8 +1117,6 @@ async function submitPin(){
       state=migrate(data);
       if(old<SCHEMA||v.len!==pinLen||!parseVault(localStorage.getItem(VAULT)))persist(true);
       unlocked();
-      const bk=Number(state.lastBackup)||0;
-      if((state.expenses.length||state.cardMoves.length)&&Date.now()-bk>30*864e5)setTimeout(()=>toast("💾 Descarga un respaldo en Ajustes"),900);
     }
   }catch(e){$("lockErr").textContent="No se pudo abrir. Asegúrate de usar la app desde su enlace https."}
   finally{busy=false;$("unlockBtn").disabled=false;if(document.body.classList.contains("locked"))$("unlockBtn").textContent=mode==="create"?"Crear PIN":"Desbloquear"}
@@ -1246,16 +1245,37 @@ function buildStatement(vaultStr){
     "de abajo o el respaldo ya no se podrá restaurar.",line("="),"",BK_START,vaultStr,BK_END,"");
   return "\ufeff"+L.join("\r\n");
 }
-$("exp").onclick=async()=>{
+async function backupFile(){
   await writing;
-  if(!localStorage.getItem(VAULT)){$("bErr").textContent="Aún no hay datos para respaldar.";return}
+  if(!localStorage.getItem(VAULT))return null;
   state.lastBackup=Date.now();await persist(true);render();
-  const v=localStorage.getItem(VAULT);
-  const blob=new Blob([buildStatement(v)],{type:"text/plain;charset=utf-8"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
-  a.download="money-club-estado-de-cuenta-"+iso(new Date())+".txt";
+  const name="money-club-estado-de-cuenta-"+iso(new Date())+".txt";
+  return new File([buildStatement(localStorage.getItem(VAULT))],name,{type:"text/plain"});
+}
+function downloadFile(f){
+  const a=document.createElement("a");a.href=URL.createObjectURL(f);a.download=f.name;
   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+$("exp").onclick=async()=>{
+  const f=await backupFile();
+  if(!f){$("bErr").textContent="Aún no hay datos para respaldar.";return}
+  downloadFile(f);
   $("bErr").textContent="Estado de cuenta descargado (.txt). Sirve también para restaurar.";
+};
+// abre el menú de compartir del celular con el respaldo adjunto (elige WhatsApp > "Tú")
+$("shareBk").onclick=async()=>{
+  $("bErr").textContent="";
+  const f=await backupFile();
+  if(!f){$("bErr").textContent="Aún no hay datos para respaldar.";return}
+  if(navigator.canShare&&navigator.canShare({files:[f]})){
+    try{
+      await navigator.share({files:[f],title:"Respaldo Money Club"});
+      $("bErr").textContent="Respaldo enviado.";
+    }catch(e){if(e&&e.name!=="AbortError")$("bErr").textContent="No se pudo compartir. Usa \"Descargar respaldo\"."}
+  }else{
+    downloadFile(f);
+    $("bErr").textContent="Este navegador no permite compartir archivos; se descargó. Envíalo desde tus archivos.";
+  }
 };
 $("impBtn").onclick=()=>$("imp").click();
 $("imp").onchange=async()=>{
