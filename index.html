@@ -124,6 +124,14 @@ section[hidden]{display:none}
 .cc-head{display:flex;align-items:center;gap:10px}
 .cc-head img{width:30px;height:30px;border-radius:8px}
 ul.list .amt.pay{color:var(--green)}
+details.hist{margin:10px 0 4px;border:1px solid var(--line);border-radius:14px;background:var(--sheet);padding:0 12px}
+details.hist>summary{cursor:pointer;padding:12px 0;font-weight:600;color:var(--muted);list-style:none}
+details.hist>summary::-webkit-details-marker{display:none}
+details.hist>summary::before{content:"▸ ";}
+details.hist[open]>summary::before{content:"▾ ";}
+details.hist ul.list li:last-child{border-bottom:0}
+details.hist .bar{margin:8px 0}
+.overdue{color:var(--red)!important;font-weight:600}
 .cfg{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:center;margin-top:10px}
 .cfg img{width:34px;height:34px;border-radius:9px}
 .cfg .lbl{font-size:13px;color:var(--muted);display:block}
@@ -313,6 +321,9 @@ body.locked .lock{display:flex}
   <div id="bars"></div>
   <h2>Todos los gastos del mes</h2>
   <ul class="list" id="monthList"></ul>
+  <h2>Meses anteriores</h2>
+  <p class="hint" style="margin-top:-4px">Este resumen se reinicia solo cada día 1. Tus meses pasados no se borran: quedan guardados aquí.</p>
+  <div id="pastMonths"></div>
 </section>
 
 <section id="fijos" hidden>
@@ -438,6 +449,7 @@ body.locked .lock{display:flex}
     <button class="btn ghost" id="impBtn" style="flex:1">Restaurar respaldo</button>
     <input type="file" id="imp" accept="application/json,.json" hidden>
   </div>
+  <p class="hint" id="lastBk"></p>
   <p class="err" id="bErr" role="status"></p>
   <p class="status" id="status"></p>
   <p class="credit">Money Club · Desarrollado por <b>Joshua Aimar</b> · 2026</p>
@@ -474,6 +486,9 @@ let cat=CATS[0];
 
 /* ---------- almacenamiento cifrado ---------- */
 const LEGACY="mis-gastos", VAULT="mis-gastos-vault", FAILS="mis-gastos-fails";
+// ¡No cambies estos nombres! Son donde viven tus datos; si cambian, la app ya no los encontraría.
+const VAULT_PREV="mis-gastos-vault-prev"; // copia de seguridad automática (la última vez que abriste la app)
+const SCHEMA=2; // sube este número solo si cambias la forma de los datos, y agrega el paso en migrate()
 const ITER=600000;
 const DEFAULT_STATE=()=>({income:0,payday:1,savingPct:10,autoLock:5,fixed:[],expenses:[],cards:{},cardMoves:[]});
 const DEFAULT_SHOP=()=>["Cera","Desodorante","Cremas","Navajas"].map((n,i)=>({id:"s"+i,name:n,done:false}));
@@ -494,7 +509,29 @@ async function unseal(v,k){
   const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(v.iv)},k,unb64(v.ct));
   return JSON.parse(dec.decode(pt));
 }
-function readVault(){try{const v=localStorage.getItem(VAULT);return v?JSON.parse(v):null}catch(e){return null}}
+function parseVault(raw){try{const v=raw?JSON.parse(raw):null;return v&&v.ct&&v.salt&&v.iv?v:null}catch(e){return null}}
+// si el guardado principal estuviera dañado, usa la copia automática en lugar de pedir un PIN nuevo
+function readVault(){return parseVault(localStorage.getItem(VAULT))||parseVault(localStorage.getItem(VAULT_PREV))}
+// actualiza los datos viejos a la forma nueva sin perder nada
+function migrate(st){
+  st=Object.assign(DEFAULT_STATE(),st||{});
+  ["fixed","expenses","cardMoves"].forEach(k=>{if(!Array.isArray(st[k]))st[k]=[]});
+  const from=Number(st.schema)||1;
+  if(from<2){
+    // v2: cada pago se asigna al estado de cuenta pendiente más antiguo y lo ya pagado pasa al historial
+    CARDS.forEach(card=>{
+      const mine=st.cardMoves.filter(m=>m.card===card.id);
+      mine.forEach(m=>{delete m.arch;if(m.type==="pago")delete m.due});
+      mine.filter(m=>m.type==="pago").sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id)).forEach(p=>{
+        const known=mine.filter(m=>m.type==="compra"||m.due);
+        p.due=assignDue(card.id,p.date,known);
+      });
+      settle(card.id,st.cardMoves);
+    });
+  }
+  st.schema=SCHEMA;
+  return st;
+}
 let saveOk=true;
 function persist(quiet){
   if(!key)return;
@@ -602,9 +639,11 @@ function render(){
   const ml=$("monthList");ml.innerHTML="";
   if(!month.length)ml.innerHTML='<li class="empty">Sin gastos este mes.</li>';
   month.forEach(e=>ml.append(li(e)));
+  renderPastMonths();
 
   // settings
   if(document.activeElement!==$("inc"))$("inc").value=state.income||"";
+  $("lastBk").textContent=state.lastBackup?`Último respaldo: ${dayFmt.format(new Date(state.lastBackup))}.`:"Aún no has descargado ningún respaldo.";
   $("payday").value=String(state.payday);
   $("autoLock").value=String(state.autoLock||5);
   if(document.activeElement!==$("sav"))$("sav").value=state.savingPct??"";
@@ -637,6 +676,33 @@ function render(){
   renderShop();
 }
 
+/* ---------- meses anteriores ---------- */
+function renderPastMonths(){
+  const box=$("pastMonths");box.innerHTML="";
+  const n=new Date(), cur=n.getFullYear()*12+n.getMonth(), g={};
+  state.expenses.forEach(e=>{const d=new Date(e.t),k=d.getFullYear()*12+d.getMonth();if(k<cur)(g[k]=g[k]||[]).push(e)});
+  const keys=Object.keys(g).map(Number).sort((a,b)=>b-a);
+  if(!keys.length){box.innerHTML='<p class="empty">Aquí aparecerán tus meses cuando termine el primero.</p>';return}
+  keys.forEach(k=>{
+    const list=g[k], tot=list.reduce((a,e)=>a+e.amount,0);
+    const det=document.createElement("details");det.className="hist";
+    const sum=document.createElement("summary");
+    const name=monthFmt.format(new Date(Math.floor(k/12),k%12,1));
+    sum.textContent=`${name[0].toUpperCase()+name.slice(1)} · ${money(tot)}`;det.append(sum);
+    const by={};list.forEach(e=>by[e.cat]=(by[e.cat]||0)+e.amount);
+    const max=Math.max(1,...Object.values(by));
+    Object.entries(by).sort((a,b)=>b[1]-a[1]).forEach(([c,v])=>{
+      const d=document.createElement("div");d.className="bar";
+      d.innerHTML=`<div class="top"><span></span><b></b></div><div class="track"><span style="width:${v/max*100}%"></span></div>`;
+      d.querySelector(".top span").textContent=`${c} (${Math.round(v/tot*100)}%)`;d.querySelector(".top b").textContent=money(v);
+      det.append(d);
+    });
+    const ul=document.createElement("ul");ul.className="list";
+    list.sort((a,b)=>b.t-a.t).forEach(e=>ul.append(li(e)));
+    det.append(ul);box.append(det);
+  });
+}
+
 /* ---------- tarjetas ---------- */
 const CARDS=[
   {id:"banamex",name:"Banamex",logo:"icons/banamex.png",def:{pay:10,cut:8}},
@@ -665,7 +731,28 @@ function nextDue(c,date){
   if(d<date)d=dueForPurchase(c,date);
   return d;
 }
-function moveDue(m){const c=cfg(m.card);if(!c.cut||!c.pay)return null;const d=parseIso(m.date);return m.type==="pago"?nextDue(c,d):dueForPurchase(c,d)}
+function moveDue(m){if(m.due)return parseIso(m.due);const c=cfg(m.card);if(!c.cut||!c.pay)return null;const d=parseIso(m.date);return m.type==="pago"?nextDue(c,d):dueForPurchase(c,d)}
+const activeMoves=(id,list=state.cardMoves)=>list.filter(m=>m.card===id&&!m.arch);
+// agrupa movimientos por fecha de pago (cada grupo = un estado de cuenta)
+function statements(moves){
+  const g={};
+  moves.forEach(m=>{const d=moveDue(m);if(!d)return;const k=iso(d);
+    const s=g[k]||(g[k]={due:k,charges:0,paid:0,count:0,moves:[]});
+    if(m.type==="pago")s.paid+=m.amount;else{s.charges+=m.amount;s.count++}
+    s.moves.push(m)});
+  return Object.values(g).map(s=>(s.net=Math.round((s.charges-s.paid)*100)/100,s)).sort((a,b)=>a.due.localeCompare(b.due));
+}
+// un pago cubre primero el estado de cuenta pendiente más antiguo
+function assignDue(id,date,moves){
+  const pend=statements(moves.filter(m=>m.card===id&&!m.arch)).find(s=>s.net>0);
+  return pend?pend.due:iso(nextDue(cfg(id),parseIso(date)));
+}
+// lo que ya quedó pagado pasa al historial (no se borra)
+function settle(id,list=state.cardMoves){
+  let n=0;const stamp=iso(today0());
+  statements(activeMoves(id,list)).forEach(s=>{if(s.count>0&&s.net<=0){s.moves.forEach(m=>m.arch=stamp);n++}});
+  return n;
+}
 const shortFmt=new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short"});
 function renderCards(){
   if(!state.cardMoves)state.cardMoves=[];
@@ -682,7 +769,7 @@ function renderCards(){
       const sm=document.createElement("small");sm.textContent="Agrega tu día de corte abajo para calcular tus pagos.";body.append(sm);
     }else{
       const totals={};
-      state.cardMoves.filter(m=>m.card===card.id).forEach(m=>{const d=moveDue(m);if(!d)return;const k=iso(d);totals[k]=(totals[k]||0)+(m.type==="pago"?-m.amount:m.amount)});
+      statements(activeMoves(card.id)).forEach(s=>totals[s.due]=s.net);
       const nd=nextDue(c,t), nk=iso(nd), net=totals[nk]||0;
       const days=Math.round((nd-t)/864e5);
       const when=document.createElement("small");
@@ -694,6 +781,7 @@ function renderCards(){
       else if(net>0&&days<=3){st.textContent="Paga pronto para evitar intereses.";st.className="due-soon"}
       body.append(when,amt);
       if(st.textContent)body.append(st);
+      Object.entries(totals).filter(([k,v])=>k<nk&&v>0).sort().forEach(([k,v])=>{const sm=document.createElement("small");sm.className="overdue";sm.textContent=`Pendiente del ${shortFmt.format(parseIso(k))}: ${money(v)}`;body.append(sm)});
       const later=Object.entries(totals).filter(([k,v])=>k>nk&&v>0).sort();
       later.slice(0,2).forEach(([k,v])=>{const sm=document.createElement("small");sm.textContent=`Después: ${shortFmt.format(parseIso(k))} · ${money(v)}`;body.append(sm)});
     }
@@ -718,8 +806,8 @@ function renderCards(){
     const hi=document.createElement("img");hi.src=card.logo;hi.alt="";
     h.append(hi,document.createTextNode("Movimientos "+card.name));
     const ul=document.createElement("ul");ul.className="list";
-    const moves=state.cardMoves.filter(m=>m.card===card.id).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-    if(!moves.length)ul.innerHTML='<li class="empty">Sin movimientos todavía.</li>';
+    const moves=activeMoves(card.id).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+    if(!moves.length)ul.innerHTML='<li class="empty">Sin movimientos pendientes.</li>';
     moves.forEach(m=>{
       const li=document.createElement("li");
       const w=document.createElement("div");w.className="what";
@@ -729,10 +817,33 @@ function renderCards(){
       w.append(b,sm);
       const a=document.createElement("span");a.className="amt"+(m.type==="pago"?" pay":"");a.textContent=(m.type==="pago"?"−":"")+money(m.amount);
       const del=document.createElement("button");del.className="del";del.textContent="×";del.setAttribute("aria-label","Borrar movimiento "+b.textContent);
-      del.onclick=()=>{if(!confirm("¿Borrar este movimiento?"))return;state.cardMoves=state.cardMoves.filter(x=>x.id!==m.id);persist();render()};
+      del.onclick=()=>{if(!confirm("¿Borrar este movimiento?"))return;state.cardMoves=state.cardMoves.filter(x=>x.id!==m.id);settle(card.id);persist();render()};
       li.append(w,a,del);ul.append(li);
     });
     box.append(h,ul);
+    // historial de estados de cuenta pagados
+    const old=statements(state.cardMoves.filter(m=>m.card===card.id&&m.arch)).reverse();
+    if(old.length){
+      const det=document.createElement("details");det.className="hist";
+      const sum=document.createElement("summary");sum.textContent=`Historial pagado (${old.length})`;det.append(sum);
+      const hl=document.createElement("ul");hl.className="list";
+      old.forEach(s=>{
+        const li=document.createElement("li");
+        const w=document.createElement("div");w.className="what";
+        const b=document.createElement("b");b.textContent="Pago del "+shortFmt.format(parseIso(s.due));
+        const sm=document.createElement("small");sm.textContent=`${s.count} compra${s.count===1?"":"s"} · Pagado ✓`;
+        w.append(b,sm);
+        const a=document.createElement("span");a.className="amt";a.textContent=money(s.charges);
+        const re=document.createElement("button");re.className="del";re.textContent="↺";re.title="Regresar a pendientes";re.setAttribute("aria-label","Regresar a pendientes el pago del "+shortFmt.format(parseIso(s.due)));
+        re.onclick=()=>{if(!confirm("¿Regresar estos movimientos a pendientes?"))return;s.moves.forEach(m=>delete m.arch);persist();render()};
+        li.append(w,a,re);hl.append(li);
+        const det2=document.createElement("li");det2.style.cssText="display:block;padding:0 0 10px;border-bottom:1px solid var(--line)";
+        det2.innerHTML="";const sm2=document.createElement("small");sm2.style.color="var(--muted)";
+        sm2.textContent=s.moves.filter(m=>m.type==="compra").sort((x,y)=>x.date.localeCompare(y.date)).map(m=>`${m.concept||"Compra"} ${money(m.amount)}`).join(" · ");
+        det2.append(sm2);hl.append(det2);
+      });
+      det.append(hl);box.append(det);
+    }
   });
   // fechas (solo lectura)
   const cf=$("ccCfg");
@@ -752,10 +863,13 @@ $("ccSave").onclick=()=>{
   const v=parseMoney($("ccAmt").value), d=$("ccDate").value;
   if(!d){$("ccErr").textContent="Elige la fecha.";return}
   if(!(v>0)){$("ccErr").textContent="Escribe un monto mayor a cero.";$("ccAmt").focus();return}
-  state.cardMoves.push({id:uid(),card:ccSel,type:ccType,concept:$("ccConcept").value.trim(),date:d,amount:v});
+  const mv={id:uid(),card:ccSel,type:ccType,concept:$("ccConcept").value.trim(),date:d,amount:v};
+  if(ccType==="pago")mv.due=assignDue(ccSel,d,state.cardMoves);
+  state.cardMoves.push(mv);
+  const closed=settle(ccSel);
   $("ccConcept").value="";$("ccAmt").value="";$("ccDate").value=iso(today0());
-  $("ccErr").textContent="";
-  setTimeout(()=>{if($("ccErr").textContent==="Movimiento guardado.")$("ccErr").textContent=""},1800);
+  $("ccErr").textContent=closed?"¡Tarjeta pagada! Esos movimientos pasaron al historial.":"";
+  setTimeout(()=>{if($("ccErr").textContent.startsWith("¡Tarjeta pagada"))$("ccErr").textContent=""},4000);
   persist();render();
 };
 $("ccAmt").addEventListener("keydown",e=>{if(e.key==="Enter")$("ccSave").click()});
@@ -908,12 +1022,13 @@ function renderHome(){
   const t=today0();let best=null;
   CARDS.forEach(card=>{
     const c=cfg(card.id);const nd=nextDue(c,t),nk=iso(nd);
-    const net=(state.cardMoves||[]).filter(m=>m.card===card.id).reduce((a,m)=>{const d=moveDue(m);return d&&iso(d)===nk?a+(m.type==="pago"?-m.amount:m.amount):a},0);
-    if(net>0&&(!best||nd<best.nd))best={card,nd,net};
+    statements(activeMoves(card.id)).filter(s=>s.net>0&&s.due<=nk).forEach(s=>{
+      const d=parseIso(s.due);if(!best||d<best.nd)best={card,nd:d,net:s.net};
+    });
   });
   if(best){
     const days=Math.round((best.nd-t)/864e5);
-    $("hsCardLbl").textContent=`${best.card.name} · ${days===0?"hoy":days===1?"mañana":"en "+days+" días"}`;
+    $("hsCardLbl").textContent=`${best.card.name} · ${days<0?"vencido":days===0?"hoy":days===1?"mañana":"en "+days+" días"}`;
     $("hsCard").textContent=money(best.net);$("hsCard").classList.toggle("warn",days<=3);
     $("tsTarjetas").textContent=`Próximo: ${shortFmt.format(best.nd)}`;
   }else{
@@ -971,7 +1086,7 @@ async function submitPin(){
       salt=crypto.getRandomValues(new Uint8Array(16));
       key=await deriveKey(pin,salt,ITER);pinLen=pin.length;
       let legacy=null;try{legacy=JSON.parse(localStorage.getItem(LEGACY))}catch(e){}
-      state=Object.assign(DEFAULT_STATE(),legacy||{});
+      state=migrate(legacy);
       await persist();
       if(readVault())localStorage.removeItem(LEGACY);
       unlocked();
@@ -987,9 +1102,16 @@ async function submitPin(){
         $("pin").value="";$("pin").focus();return;
       }
       writeFails({n:0,until:0});
-      key=k;salt=s2;pinLen=pin.length;state=Object.assign(DEFAULT_STATE(),data);
-      if(v.len!==pinLen)persist(true);
+      key=k;salt=s2;pinLen=pin.length;
+      // copia de seguridad automática de lo que había antes de esta sesión
+      try{localStorage.setItem(VAULT_PREV,JSON.stringify(v))}catch(e){}
+      const old=Number(data&&data.schema)||1;
+      if(old<SCHEMA){try{localStorage.setItem("mis-gastos-vault-v"+old,JSON.stringify(v))}catch(e){}}
+      state=migrate(data);
+      if(old<SCHEMA||v.len!==pinLen||!parseVault(localStorage.getItem(VAULT)))persist(true);
       unlocked();
+      const bk=Number(state.lastBackup)||0;
+      if((state.expenses.length||state.cardMoves.length)&&Date.now()-bk>30*864e5)setTimeout(()=>toast("💾 Descarga un respaldo en Ajustes"),900);
     }
   }catch(e){$("lockErr").textContent="No se pudo abrir. Asegúrate de usar la app desde su enlace https."}
   finally{busy=false;$("unlockBtn").disabled=false;if(document.body.classList.contains("locked"))$("unlockBtn").textContent=mode==="create"?"Crear PIN":"Desbloquear"}
@@ -1012,7 +1134,7 @@ $("pin2").addEventListener("keydown",e=>{if(e.key==="Enter")submitPin()});
 $("forgot").onclick=()=>{
   if(!confirm("Sin tu PIN no hay forma de recuperar los datos. ¿Quieres BORRAR todo y empezar de cero?"))return;
   if(!confirm("Última confirmación: se borrarán todos tus gastos de este dispositivo."))return;
-  localStorage.removeItem(VAULT);localStorage.removeItem(FAILS);
+  localStorage.removeItem(VAULT);localStorage.removeItem(VAULT_PREV);localStorage.removeItem(FAILS);
   mode="create";$("lockErr").textContent="";showLock();
 };
 
@@ -1048,8 +1170,9 @@ $("chgPin").onclick=async()=>{
 /* ---------- respaldo ---------- */
 $("exp").onclick=async()=>{
   await writing;
+  if(!localStorage.getItem(VAULT)){$("bErr").textContent="Aún no hay datos para respaldar.";return}
+  state.lastBackup=Date.now();await persist(true);render();
   const v=localStorage.getItem(VAULT);
-  if(!v){$("bErr").textContent="Aún no hay datos para respaldar.";return}
   const blob=new Blob([v],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
   a.download="money-club-"+new Date().toISOString().slice(0,10)+".json";
@@ -1070,7 +1193,7 @@ $("imp").onchange=async()=>{
     }
     if(!d||!Array.isArray(d.expenses)||!Array.isArray(d.fixed))throw 0;
     if(!confirm("Esto reemplaza tus datos actuales con los del respaldo. ¿Continuar?")){$("imp").value="";return}
-    state=Object.assign(DEFAULT_STATE(),d);
+    state=migrate(d);
     await persist();render();$("bErr").textContent="Respaldo restaurado.";
   }catch(e){$("bErr").textContent="Ese archivo no es un respaldo válido de Money Club."}
   $("imp").value="";
